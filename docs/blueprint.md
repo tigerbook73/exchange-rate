@@ -169,7 +169,7 @@
   - 评估过官方新出的 `@serwist/turbopack`（用 esbuild 代替 webpack、把 SW 改成 Route Handler 动态提供，原生兼容 Turbopack）作为替代方案，但它的集成方式和现在的 `@serwist/next` 完全不同（要重写 `next.config.ts`、新增一个 route 文件），而且官方文档里自己标注为"实验性支持"；权衡稳定性后维持 `--webpack` 方案，没有切换。
   - `src/app/sw/sw.ts` 需要 `webworker` 类型环境（`self`、`ServiceWorkerGlobalScope` 等），和主程序 tsconfig 的 `dom` 环境冲突，不能共用一个 tsconfig。**注意**：一开始在项目根目录另建一个同级的 `tsconfig.worker.json`（文件名不同、目录相同）不够——VS Code 给某个文件配对 tsconfig 是按"从该文件所在目录往上找最近的、名字就叫 `tsconfig.json` 的文件"来定的，同目录下改名的兄弟文件它不会主动发现，编辑器还是会用根 `tsconfig.json`（`dom` 环境）检查这个文件，照样报 `Cannot find name 'ServiceWorkerGlobalScope'`。正确做法是**把 sw 相关文件单独放一个子目录、且子目录里的 tsconfig 文件名必须叫 `tsconfig.json`**：`src/app/sw/{sw.ts, tsconfig.json}`（子目录里的 `tsconfig.json` 设 `lib: ["ES2020", "WebWorker"]`，只 `include: ["sw.ts"]`），这样 VS Code 打开 `src/app/sw/sw.ts` 时会先找到这个更近的 `tsconfig.json`。根 `tsconfig.json` 的 `exclude` 加 `src/app/sw`，`pnpm typecheck` 依次跑 `tsc --noEmit && tsc --noEmit -p src/app/sw/tsconfig.json`，两边都有类型检查覆盖。
 - **已验证的行为（非 bug，PWA 通用特性）**：Service Worker 首次安装时不会控制"触发安装的那次页面加载"，要等下一次导航才会真正接管请求。所以"离线也能重新打开 App"这个场景，测试/验证时要先完整访问 → 再刷新一次（在线状态下，让 SW 接管这次导航并把页面缓存进去）→ 才能断网重载验证，否则会看到离线直接加载失败（这不是这个项目的缺陷，是所有基于 Service Worker 的 PWA 的通用行为）。
-- 添加到主屏幕的引导提示：未实现（按原计划为可选项）。
+- 添加到主屏幕的引导提示：已实现，但只在 Android/Chromium 上生效——`InstallButton`（`src/components/install-button.tsx`）监听 `beforeinstallprompt` 事件，事件不触发时组件不渲染任何内容。iOS Safari 完全不支持这个事件（没有任何 JS API 能触发安装弹窗），只能引导用户手动走"分享 → 添加到主屏幕"，所以 iOS 上没有对应按钮，这是平台限制，不是没做。
 
 ## 11. 部署步骤（Vercel Hobby，无 Cron）
 
