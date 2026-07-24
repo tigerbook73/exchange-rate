@@ -14,6 +14,7 @@ export function RangeToggle({
     <div className="flex items-center gap-1" role="group" aria-label="时间范围">
       {RANGE_OPTIONS.map((option) => (
         <Button
+          className="px-4"
           key={option}
           type="button"
           size="lg"
