@@ -8,11 +8,35 @@ import {
   PointElement,
   Tooltip,
   type ChartOptions,
+  type Plugin,
 } from "chart.js";
 import { useTheme } from "next-themes";
 import { useEffect, useState } from "react";
 import { Line } from "react-chartjs-2";
 import type { ChartPoint } from "@/lib/rate-view";
+
+// Draws a vertical reference line through the currently hovered/touched
+// data point, so a finger dragging across the chart gets a visible
+// crosshair alongside the tooltip.
+const crosshairPlugin: Plugin<"line"> = {
+  id: "crosshair",
+  afterDraw: (chart) => {
+    const active = chart.getActiveElements()[0];
+    if (!active) {
+      return;
+    }
+    const { ctx, chartArea } = chart;
+    const x = active.element.x;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x, chartArea.top);
+    ctx.lineTo(x, chartArea.bottom);
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = chart.options.plugins?.crosshair?.color ?? "#8888";
+    ctx.stroke();
+    ctx.restore();
+  },
+};
 
 ChartJS.register(
   CategoryScale,
@@ -20,7 +44,15 @@ ChartJS.register(
   PointElement,
   LineElement,
   Tooltip,
+  crosshairPlugin,
 );
+
+declare module "chart.js" {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- must match chart.js's own generic signature to merge
+  interface PluginOptionsByType<TType> {
+    crosshair?: { color?: string };
+  }
+}
 
 // Reused from the app's existing shadcn theme tokens (see globals.css), plus
 // one deliberate accent hue for the data line — validated against both
@@ -71,8 +103,13 @@ export function RateChart({ points }: { points: ChartPoint[] }) {
     responsive: true,
     maintainAspectRatio: false,
     layout: { padding: { right: 8, left: 4, top: 8, bottom: 4 } },
+    interaction: { mode: "index", intersect: false },
+    hover: { mode: "index", intersect: false },
     plugins: {
+      crosshair: { color: colors.grid },
       tooltip: {
+        mode: "index",
+        intersect: false,
         callbacks: {
           afterLabel: (item) => {
             const point = points[item.dataIndex];
