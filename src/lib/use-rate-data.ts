@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { REVALIDATE_SECONDS } from "./api-cache";
 import type { HistoryResponse, TodayResponse } from "./api-types";
 import { getAllRates, openRatesDb, type RateRecord } from "./rates-db";
 import { syncRates } from "./rates-sync";
@@ -33,6 +34,7 @@ export function useRateData(): UseRateDataResult {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const lastSyncedAtRef = useRef(0);
 
   const refresh = useCallback(async () => {
     setIsSyncing(true);
@@ -45,6 +47,7 @@ export function useRateData(): UseRateDataResult {
       await syncRates(db, today, history);
       setRecords(await getAllRates(db));
       setError(null);
+      lastSyncedAtRef.current = Date.now();
     } catch (err) {
       setError(err instanceof Error ? err.message : "同步失败");
     } finally {
@@ -73,6 +76,24 @@ export function useRateData(): UseRateDataResult {
     // `refresh` is stable (useCallback with no deps); only run on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    // On mobile, backgrounding/foregrounding the PWA doesn't remount this
+    // component, so nothing would otherwise re-sync when the user returns.
+    // Throttled to the API's own cache window since the source can't have
+    // changed more often than that anyway.
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "visible") return;
+      const elapsedMs = Date.now() - lastSyncedAtRef.current;
+      if (elapsedMs < REVALIDATE_SECONDS * 1000) return;
+      void refresh();
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refresh]);
 
   return { records, isLoading, isSyncing, error, refresh };
 }

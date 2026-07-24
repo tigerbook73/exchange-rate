@@ -1,4 +1,12 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import type { CurrentRateView } from "@/lib/rate-view";
 
 function formatUpdatedAt(publishedAt: string): string {
@@ -15,19 +23,35 @@ function formatUpdatedAt(publishedAt: string): string {
 export function RateCard({
   rate,
   isSyncing,
+  onRefresh,
 }: {
   rate: CurrentRateView | null;
   /** True while a background sync is in flight — shown as an inline note
    * next to the timestamp rather than swapping out the card's layout, so
    * the card never jumps between a "loading" skeleton and its real content. */
   isSyncing: boolean;
+  onRefresh: () => void;
 }) {
   return (
     <Card className="w-full max-w-md min-h-[30svh]">
       <CardHeader>
-        <CardTitle className="text-sm font-normal text-muted-foreground">
+        <CardTitle className="text-base font-normal text-muted-foreground">
           工商银行 澳元 购汇价（现汇卖出）
         </CardTitle>
+        <CardAction>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="刷新汇率"
+            disabled={isSyncing}
+            onClick={onRefresh}
+          >
+            <RefreshCw
+              className={`size-4 ${isSyncing ? "animate-spin" : ""}`}
+            />
+          </Button>
+        </CardAction>
       </CardHeader>
       <CardContent className="flex flex-1 flex-col">
         <div className="flex flex-1 flex-col justify-center">
@@ -35,7 +59,7 @@ export function RateCard({
             {rate ? rate.huiSell.toFixed(4) : "－－－－"}
           </p>
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-base text-muted-foreground">
           {rate
             ? rate.publishedAt
               ? `更新于 ${formatUpdatedAt(rate.publishedAt)}`
@@ -44,7 +68,7 @@ export function RateCard({
           {isSyncing ? "（加载中…）" : ""}
         </p>
         {rate?.staleNote ? (
-          <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
+          <p className="mt-2 text-base text-amber-600 dark:text-amber-400">
             ⚠ {rate.staleNote}
           </p>
         ) : null}

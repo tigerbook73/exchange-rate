@@ -13,7 +13,7 @@ import {
 import { useRateData } from "@/lib/use-rate-data";
 
 export default function Home() {
-  const { records, isLoading, isSyncing, error } = useRateData();
+  const { records, isLoading, isSyncing, error, refresh } = useRateData();
   const [range, setRange] = useState<RangeOption>("30d");
 
   const currentRate = useMemo(() => getCurrentRateView(records), [records]);
@@ -24,7 +24,7 @@ export default function Home() {
 
   return (
     <main className="flex h-full min-h-0 w-full flex-1 flex-col items-center gap-6 overflow-hidden p-6 sm:gap-8 sm:p-8">
-      <RateCard rate={currentRate} isSyncing={isSyncing} />
+      <RateCard rate={currentRate} isSyncing={isSyncing} onRefresh={refresh} />
 
       {error && !isLoading ? (
         <p className="text-xs text-destructive" role="alert">
@@ -39,7 +39,7 @@ export default function Home() {
 
       <InstallButton />
 
-      <p className="w-full max-w-md text-left text-xs text-muted-foreground">
+      <p className="w-full max-w-md text-left text-sm text-muted-foreground">
         数据来自快易理财网，仅供参考。
       </p>
     </main>
