@@ -118,7 +118,7 @@
 
 - 设置合理的 `User-Agent`，避免被识别为异常爬虫。
 - 加超时和异常处理。
-- 响应头加 `Cache-Control: s-maxage=300, stale-while-revalidate`，利用 Vercel 边缘缓存减少对源站的重复请求（**不做**应用层的内存级请求频率限制——Serverless Function 实例无状态、水平扩展，内存计数器无法跨实例共享，起不到可靠限流效果；对源站的保护完全依赖边缘缓存自然摊薄重复请求）。
+- 响应头加 `Cache-Control: s-maxage=300, stale-while-revalidate`，**并且**加 `export const revalidate = 300` 路由级配置——两者都要，缺一不可。已用真实 Vercel 部署验证过：只加响应头，线上会被 Vercel 覆盖成 `Cache-Control: public, max-age=0, must-revalidate`（`x-vercel-cache: MISS`）完全不缓存，因为 Vercel 的边缘缓存是照 Next 的路由分类（`ƒ` 动态 / `○` 静态）走的，不是照手动设置的响应头走的；加上 `export const revalidate = 300` 后路由会变成 `○ (Static)` 带 `Revalidate 5m`，边缘缓存才真正生效。响应头本身在自托管等非 Vercel 场景下仍然有意义，保留不动。利用边缘缓存减少对源站的重复请求（**不做**应用层的内存级请求频率限制——Serverless Function 实例无状态、水平扩展，内存计数器无法跨实例共享，起不到可靠限流效果；对源站的保护完全依赖边缘缓存自然摊薄重复请求）。
 
 ## 7. 前端本地缓存与"自动补缺"逻辑
 
