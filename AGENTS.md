@@ -38,7 +38,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | 框架      | Next.js（App Router）                                                        |                                                                                                                                                                                                         |
 | HTML 解析 | cheerio                                                                      | 仅服务端（Route Handler）使用                                                                                                                                                                           |
 | UI 组件   | shadcn/ui（基于 Tailwind CSS，底层原语库为 **Base UI**，非早期版本的 Radix） | 组件用 `npx shadcn add` 按需引入，不要手写重复造轮子的基础组件（Button/Card/Dialog 等）；深度定制样式优先改 Tailwind 配置/CSS 变量，而不是绕开 shadcn 自己写                                            |
-| 主题      | 支持亮色/暗色（浅色为默认，跟随系统 `prefers-color-scheme`，并提供手动切换） | 见下方「主题支持」                                                                                                                                                                                      |
+| 主题      | 支持亮色/暗色，**只跟随系统 `prefers-color-scheme`，不提供手动切换按钮**     | 见下方「主题支持」                                                                                                                                                                                      |
 | 图表      | Chart.js + react-chartjs-2                                                   | 两者配合使用（后者是前者的 React 封装），需适配主题色（暗色模式下网格线/文字颜色要跟着变）                                                                                                              |
 | 本地存储  | IndexedDB（通过 `idb` 库封装）                                               |                                                                                                                                                                                                         |
 | PWA       | `@serwist/next`                                                              | 不用 `next-pwa`（对 App Router 兼容性差、维护停滞）；`runtimeCaching` 直接用其 `defaultCache`（已内置 `/api/*` 走 NetworkFirst），不用自己写缓存规则；与 Turbopack 冲突，见下方「Next.js 版本注意事项」 |
@@ -46,12 +46,17 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | 部署      | Vercel Hobby（免费版）                                                       | 无 Cron、无数据库                                                                                                                                                                                       |
 | 包管理器  | pnpm                                                                         | 遵循用户全局 CLAUDE.md 约定                                                                                                                                                                             |
 
-## 主题支持（新增要求）
+## 主题支持
 
-- 使用 shadcn/ui 自带的主题机制（CSS 变量 + `next-themes` 或等价方案），默认跟随系统设置，同时提供手动切换入口（亮色 / 暗色 / 跟随系统）。
+- 使用 shadcn/ui 自带的主题机制（CSS 变量 + `next-themes`：`defaultTheme="system"` + `enableSystem`），只跟随系统设置。**不要加手动切换按钮**——人工评审阶段明确去掉了这个 UI（之前 Phase 1 做过一版亮/暗/跟随系统三按钮切换，后来评审决定移除，`src/components/theme-toggle.tsx` 已删除，不要因为看到 `next-themes` 就顺手加回去）。
 - `manifest.json` 的 `theme_color` / `background_color` 需要同时考虑亮色与暗色两套取值（PWA manifest 本身只支持单一静态值，若要区分需结合 `meta[name=theme-color][media=...]` 或在应用内动态设置）。
 - 图表配色（折线、网格线、坐标轴文字）不能硬编码亮色假设，需要随主题切换联动，参考项目里 `dataviz` skill 的配色方法论保持视觉一致性。
 - 新增 UI 组件时默认要在亮色和暗色下都验证过，不要只测一种主题就提交。
+
+## UI 稳定性：加载态不能替换掉已有内容的结构
+
+- 人工评审明确的一条原则：**任何"正在同步/加载"的状态，都不能把已经显示的内容整块换成占位文字/骨架屏**，而是在原有结构里叠加一个不起眼的提示（比如时间戳旁边加"（加载中…）"），同步完成后提示消失、数值原地更新。目的是避免界面在"有数据"和"加载中占位"两种完全不同的布局之间来回跳动。
+- `RateCard`（`src/components/rate-card.tsx`）是这条原则的参考实现：价格、时间戳两行永远渲染，`isSyncing` 只控制时间戳后面那个行内提示的显隐，不控制要不要渲染价格行本身。以后加新的"有本地缓存 + 会后台刷新"的 UI 时，照这个模式来，不要用 `isLoading ? <Skeleton/> : <Content/>` 这种整体替换的写法。
 
 ## Next.js 版本注意事项（当前锁定 16.x，非训练数据里熟悉的版本）
 

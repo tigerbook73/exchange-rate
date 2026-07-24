@@ -85,21 +85,70 @@ test("marks the gap day with a hollow point and an explanatory tooltip", async (
   ).toBeVisible();
 });
 
-test("switches between light and dark theme", async ({ page }) => {
+test("follows the system color scheme (no manual toggle)", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
   await page.goto("/");
   await expect(page.getByText("4.7500")).toBeVisible();
-
-  await page.getByRole("button", { name: /亮色/ }).click();
   await expect(page.locator("html")).not.toHaveClass(/dark/);
   const lightBg = await page.evaluate(
     () => getComputedStyle(document.body).backgroundColor,
   );
 
-  await page.getByRole("button", { name: /暗色/ }).click();
+  await page.emulateMedia({ colorScheme: "dark" });
   await expect(page.locator("html")).toHaveClass(/dark/);
   const darkBg = await page.evaluate(
     () => getComputedStyle(document.body).backgroundColor,
   );
 
   expect(darkBg).not.toBe(lightBg);
+});
+
+test("shows the last known rate (with a loading note) instead of a blank state while syncing", async ({
+  page,
+}) => {
+  // Delay the mocked history response so the initial cached-vs-syncing gap
+  // is observable, then seed IndexedDB with a prior value before the app's
+  // own sync runs.
+  await page.addInitScript(() => {
+    const req = indexedDB.open("fx-cache", 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore("rates", { keyPath: "date" });
+    };
+    req.onsuccess = () => {
+      req.result.transaction("rates", "readwrite").objectStore("rates").put({
+        date: "2020-01-01",
+        huiSell: 4.1234,
+        publishedAt: null,
+        source: "history",
+        carriedFromDate: null,
+      });
+    };
+  });
+
+  await page.unroute("**/api/history");
+  await page.route("**/api/history", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        bank: "icbc",
+        currency: "aud",
+        field: "huiSell",
+        series: HISTORY_SERIES,
+      }),
+    });
+  });
+
+  await page.goto("/");
+
+  // While the sync is still in flight, the card shows the seeded value plus
+  // an inline loading note — never a blank "loading" placeholder.
+  await expect(page.getByText("4.1234")).toBeVisible();
+  await expect(page.getByText("（加载中…）")).toBeVisible();
+
+  // Once the sync resolves, the note disappears and the fresh value takes
+  // over, without the card ever having changed structure.
+  await expect(page.getByText("4.7500")).toBeVisible();
+  await expect(page.getByText("（加载中…）")).not.toBeVisible();
 });

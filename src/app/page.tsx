@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import { RangeToggle } from "@/components/range-toggle";
 import { RateCard } from "@/components/rate-card";
 import { RateChart } from "@/components/rate-chart";
-import { ThemeToggle } from "@/components/theme-toggle";
 import {
   buildChartSeries,
   getCurrentRateView,
@@ -35,14 +34,7 @@ export default function Home() {
         </div>
       ) : null}
 
-      <div className="flex w-full max-w-sm items-center justify-between">
-        <span className="text-xs text-muted-foreground">
-          {isSyncing ? "同步中…" : isLoading ? "加载中…" : null}
-        </span>
-        <ThemeToggle />
-      </div>
-
-      <RateCard rate={currentRate} />
+      <RateCard rate={currentRate} isSyncing={isSyncing} />
 
       {error && !isLoading ? (
         <p className="text-xs text-destructive" role="alert">
