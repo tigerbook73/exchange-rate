@@ -40,6 +40,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 | 图表      | Chart.js + react-chartjs-2                                                   | 两者配合使用（后者是前者的 React 封装），需适配主题色（暗色模式下网格线/文字颜色要跟着变）                                                                   |
 | 本地存储  | IndexedDB（通过 `idb` 库封装）                                               |                                                                                                                                                              |
 | PWA       | `@serwist/next`                                                              | 不用 `next-pwa`（对 App Router 兼容性差、维护停滞）；若 `@serwist/next` 落地遇阻，退化为手写精简 service worker                                              |
+| E2E 测试  | Playwright（`@playwright/test`）                                             | 见下方「测试规范」；配置在根目录 `playwright.config.ts`，用例放 `e2e/`                                                                                       |
 | 部署      | Vercel Hobby（免费版）                                                       | 无 Cron、无数据库                                                                                                                                            |
 | 包管理器  | pnpm                                                                         | 遵循用户全局 CLAUDE.md 约定                                                                                                                                  |
 
@@ -114,7 +115,7 @@ docs/plans/
 3. **阶段验收（结束前必须过）**
    - `pnpm lint` / `pnpm typecheck` / `pnpm build` 全部通过。
    - `pnpm test`（vitest）全部通过；本阶段新增的业务逻辑，尤其是「领域规则」里列出的时区/跨年/周末空档等逻辑，必须有对应单测覆盖，不能只靠人工检查。
-   - 涉及 UI/交互变化的阶段：本地起 `next dev`，在浏览器里实际走一遍改动的功能（含边界场景，且亮色/暗色主题都验证），不能只凭自动化测试通过就算完成。
+   - 涉及 UI/交互变化的阶段：`pnpm test:e2e`（Playwright）全部通过，本阶段新增/改动的关键用户路径要有对应 e2e case（见「测试规范」）；此外仍建议本地起 `next dev` 用浏览器走一遍改动（含亮/暗主题），把 e2e 断言覆盖不到的纯视觉效果（间距、动效是否顺眼等）过一遍。
    - 逐条对照阶段计划文档里的验收标准打勾，未达成的不算阶段完成，回到"自主执行"继续处理。
 4. **阶段收尾 — 文档清理与归档**
    - 把阶段计划文档中仍有长期参考价值的内容迁移进对应的长期文档：
@@ -125,10 +126,22 @@ docs/plans/
 
 ### 测试规范
 
+测试分两层，各司其职，不要互相替代：
+
+**单元测试（vitest）**
+
 - 默认测试框架 vitest（遵循用户全局 CLAUDE.md 约定）。
-- 单测优先覆盖领域规则中容易出错的逻辑：时区/跨年拼接、周末补值与空档判定、IndexedDB upsert 与空档查询、cheerio 解析函数。
+- 优先覆盖领域规则中容易出错的纯逻辑：时区/跨年拼接、周末补值与空档判定、IndexedDB upsert 与空档查询、cheerio 解析函数。
 - 抓取解析函数（cheerio 选择器）用本地保存的 HTML fixture 测试，不在测试/CI 中直接请求 `kylc.com`，避免测试脆弱、也避免给源站增加压力。
-- UI 关键交互路径（时间范围切换、主题切换、下拉刷新等）至少手动在浏览器验证一次，结果记在阶段验收记录里；不强制要求 UI 快照测试。
+- 测试文件与被测源文件同目录（见「目录结构约定」），不进 `e2e/`。
+
+**端到端测试（Playwright，`e2e/` 目录，`pnpm test:e2e` 运行）**
+
+- 覆盖真实浏览器里的关键用户路径：加载首页看到购汇价卡片、切换时间范围（7 天/30 天/全部）、切换主题（亮/暗/跟随系统）、下拉刷新、离线状态下展示已缓存数据等。
+- **必须用 `page.route()` mock 掉 `/api/today`、`/api/history` 的响应**，不依赖真实网络或 `kylc.com`——原因和单测里不直接请求源站一致：避免测试脆弱、避免拖慢/污染源站，也让空档/跨年等边界场景可以用固定 mock 数据稳定复现（否则依赖当天真实数据，边界场景很难测到）。
+- Playwright 配置（`playwright.config.ts`）已配好 `webServer`，跑 `pnpm test:e2e` 会自动拉起 `next dev` 并等待就绪，不需要手动先起 dev server。
+- 当前只跑 Chromium 一个浏览器项目（个人项目，不需要跨浏览器矩阵）；如果以后发现要覆盖 Safari 特有的 PWA/离线行为，再按需加 webkit 项目。
+- 从 Phase 4（首页 UI）开始，每个改动用户可见路径的阶段都要新增/更新对应 e2e case，作为该阶段验收标准的一部分；Phase 1-3（脚手架/API/IndexedDB）没有面向用户的 UI，暂不强制写 e2e，用单测覆盖即可。
 
 ### Git 规范（在用户全局 Conventional Commits 约定之上补充）
 
