@@ -1,3 +1,10 @@
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+<!-- END:nextjs-agent-rules -->
+
 # AGENTS.md — 工商银行澳币汇率 PWA
 
 本文件是本项目的 Agent 指导文件，约束后续设计与实现。完整技术方案见 [`docs/blueprint.md`](./docs/blueprint.md)，本文件只提炼**容易出错、容易被遗忘**的约束，两者冲突时以 `docs/blueprint.md` 最新内容为准，发现冲突应先同步更新再继续。
@@ -24,17 +31,17 @@
 
 ## 技术栈约束
 
-| 层 | 选型 | 备注 |
-| --- | --- | --- |
-| 框架 | Next.js（App Router） | |
-| HTML 解析 | cheerio | 仅服务端（Route Handler）使用 |
-| UI 组件 | shadcn/ui（基于 Tailwind CSS） | 组件用 `npx shadcn add` 按需引入，不要手写重复造轮子的基础组件（Button/Card/Dialog 等）；深度定制样式优先改 Tailwind 配置/CSS 变量，而不是绕开 shadcn 自己写 |
-| 主题 | 支持亮色/暗色（浅色为默认，跟随系统 `prefers-color-scheme`，并提供手动切换） | 见下方「主题支持」 |
-| 图表 | Chart.js + react-chartjs-2 | 两者配合使用（后者是前者的 React 封装），需适配主题色（暗色模式下网格线/文字颜色要跟着变） |
-| 本地存储 | IndexedDB（通过 `idb` 库封装） | |
-| PWA | `@serwist/next` | 不用 `next-pwa`（对 App Router 兼容性差、维护停滞）；若 `@serwist/next` 落地遇阻，退化为手写精简 service worker |
-| 部署 | Vercel Hobby（免费版） | 无 Cron、无数据库 |
-| 包管理器 | pnpm | 遵循用户全局 CLAUDE.md 约定 |
+| 层        | 选型                                                                         | 备注                                                                                                                                                         |
+| --------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 框架      | Next.js（App Router）                                                        |                                                                                                                                                              |
+| HTML 解析 | cheerio                                                                      | 仅服务端（Route Handler）使用                                                                                                                                |
+| UI 组件   | shadcn/ui（基于 Tailwind CSS，底层原语库为 **Base UI**，非早期版本的 Radix） | 组件用 `npx shadcn add` 按需引入，不要手写重复造轮子的基础组件（Button/Card/Dialog 等）；深度定制样式优先改 Tailwind 配置/CSS 变量，而不是绕开 shadcn 自己写 |
+| 主题      | 支持亮色/暗色（浅色为默认，跟随系统 `prefers-color-scheme`，并提供手动切换） | 见下方「主题支持」                                                                                                                                           |
+| 图表      | Chart.js + react-chartjs-2                                                   | 两者配合使用（后者是前者的 React 封装），需适配主题色（暗色模式下网格线/文字颜色要跟着变）                                                                   |
+| 本地存储  | IndexedDB（通过 `idb` 库封装）                                               |                                                                                                                                                              |
+| PWA       | `@serwist/next`                                                              | 不用 `next-pwa`（对 App Router 兼容性差、维护停滞）；若 `@serwist/next` 落地遇阻，退化为手写精简 service worker                                              |
+| 部署      | Vercel Hobby（免费版）                                                       | 无 Cron、无数据库                                                                                                                                            |
+| 包管理器  | pnpm                                                                         | 遵循用户全局 CLAUDE.md 约定                                                                                                                                  |
 
 ## 主题支持（新增要求）
 
@@ -42,6 +49,14 @@
 - `manifest.json` 的 `theme_color` / `background_color` 需要同时考虑亮色与暗色两套取值（PWA manifest 本身只支持单一静态值，若要区分需结合 `meta[name=theme-color][media=...]` 或在应用内动态设置）。
 - 图表配色（折线、网格线、坐标轴文字）不能硬编码亮色假设，需要随主题切换联动，参考项目里 `dataviz` skill 的配色方法论保持视觉一致性。
 - 新增 UI 组件时默认要在亮色和暗色下都验证过，不要只测一种主题就提交。
+
+## Next.js 版本注意事项（当前锁定 16.x，非训练数据里熟悉的版本）
+
+- 写代码前先读 `node_modules/next/dist/docs/` 里对应指南，不要凭训练数据里的旧 API 假设。
+- Route Handler 的 `GET` **默认不缓存**（Next 15+ 起的行为）；本项目依赖的是手动设置 `Cache-Control: s-maxage=...` 响应头走 Vercel 边缘缓存，与 Next 内部的 fetch/route 缓存是两套机制，不要混淆、也不需要额外配置 `export const dynamic = 'force-static'`。
+- `params`、`searchParams`、`cookies()`、`headers()` 等一律是异步的（返回 Promise），需要 `await`。
+- `next dev` / `next build` 默认用 Turbopack（无需 `--turbopack` 参数），若未来引入自定义 Webpack 配置需注意兼容性。
+- 中间件文件约定已从 `middleware.ts` 改名为 `proxy.ts`（本项目目前不需要中间件/proxy，若后续要加，用新约定名）。
 
 ## 依赖版本与脚手架
 
@@ -51,6 +66,29 @@
   - shadcn/ui 组件：`npx shadcn add <component>`（而不是手写 Button/Card/Dialog 等基础组件）。
   - PWA 配置：`@serwist/next` 提供的初始化命令/模板（而不是手写 service worker 注册逻辑）。
   - 其他类似场景（如 `idb` 的 schema 初始化、Tailwind 配置）同理，优先用官方推荐的初始化方式起步，再针对项目需求调整。
+
+## 目录结构约定
+
+```
+src/
+  app/                    // Next.js App Router：页面 + Route Handler
+    api/today/route.ts    // Phase 2
+    api/history/route.ts  // Phase 2
+    page.tsx, layout.tsx
+    *.test.tsx            // 页面级测试与被测文件同目录
+  components/
+    ui/                   // shadcn/ui 生成的组件，用 `npx shadcn add` 管理，不手改内部实现
+    *.tsx                 // 手写的业务/布局组件（theme-provider、theme-toggle、后续的 rate-card、chart 等）
+  lib/
+    utils.ts              // shadcn 生成的 cn() 等工具
+    *.ts                  // 业务逻辑模块（时区/跨年处理、周末补值与空档判定、cheerio 解析、idb 封装等，Phase 2/3）
+    *.test.ts             // 与被测模块同目录
+    __fixtures__/         // cheerio 解析用的本地 HTML fixture（Phase 2 起）
+```
+
+- 测试文件与被测源文件同目录（`*.test.ts` / `*.test.tsx`），不单独建 `__tests__` 顶层目录。
+- `src/components/ui/` 只放 shadcn 生成的组件，业务组件放在 `src/components/` 下、不进 `ui/` 子目录，保持"生成的" vs "手写的"边界清晰。
+- 业务逻辑（尤其是「领域规则」里列的易错逻辑）放在 `src/lib/`，不要直接写在 Route Handler 或页面组件里，方便单测覆盖。
 
 ## 迭代工作流（分阶段执行）
 

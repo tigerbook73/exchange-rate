@@ -60,15 +60,15 @@
 
 ## 5. 技术栈
 
-| 层        | 选型                           | 理由                                                                    |
-| --------- | ------------------------------ | ----------------------------------------------------------------------- |
-| 框架      | Next.js（App Router）          | API Route 天然是 Vercel Serverless Function，前后端一个项目，零额外配置 |
-| HTML 解析 | cheerio                        | 轻量、服务端可用，语法类似 jQuery，适合抓表格                           |
-| 前端 UI   | React + Tailwind CSS + shadcn/ui | 移动端样式效率高；shadcn/ui 按需引入组件，自带主题（CSS 变量）机制     |
-| 图表      | Chart.js + react-chartjs-2     | Chart.js 为核心渲染库，react-chartjs-2 是其 React 组件封装，两者配合使用；轻量、移动端触屏体验好 |
-| 本地存储  | IndexedDB（通过 idb 库封装）   | 容量远大于 localStorage，适合存时间序列                                 |
-| PWA       | @serwist/next（基于 Workbox）  | 自动生成 service worker + manifest，对 App Router 兼容性更好            |
-| 部署      | Vercel Hobby（免费版）         | 与 Next.js 无缝集成，无需 Cron                                          |
+| 层        | 选型                             | 理由                                                                                             |
+| --------- | -------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 框架      | Next.js（App Router）            | API Route 天然是 Vercel Serverless Function，前后端一个项目，零额外配置                          |
+| HTML 解析 | cheerio                          | 轻量、服务端可用，语法类似 jQuery，适合抓表格                                                    |
+| 前端 UI   | React + Tailwind CSS + shadcn/ui | 移动端样式效率高；shadcn/ui 按需引入组件，自带主题（CSS 变量）机制                               |
+| 图表      | Chart.js + react-chartjs-2       | Chart.js 为核心渲染库，react-chartjs-2 是其 React 组件封装，两者配合使用；轻量、移动端触屏体验好 |
+| 本地存储  | IndexedDB（通过 idb 库封装）     | 容量远大于 localStorage，适合存时间序列                                                          |
+| PWA       | @serwist/next（基于 Workbox）    | 自动生成 service worker + manifest，对 App Router 兼容性更好                                     |
+| 部署      | Vercel Hobby（免费版）           | 与 Next.js 无缝集成，无需 Cron                                                                   |
 
 ## 6. 后端 API 设计（纯代理，无存储）
 
