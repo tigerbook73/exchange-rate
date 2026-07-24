@@ -50,6 +50,24 @@ describe("toRateRecords", () => {
       carriedFromDate: null,
     });
   });
+
+  it("drops history's copy of today's row when /api/today fails, instead of using the stale value", () => {
+    const history: HistoryResponse = {
+      currency: "aud",
+      bank: "icbc",
+      field: "huiSell",
+      series: [
+        { date: "2026-07-24", huiSell: 4.7484 }, // stale — cached up to an hour
+        { date: "2026-07-23", huiSell: 4.7459 },
+      ],
+    };
+
+    const records = toRateRecords(null, history, "2026-07-24");
+    const byDate = new Map(records.map((r) => [r.date, r]));
+
+    expect(byDate.has("2026-07-24")).toBe(false);
+    expect(byDate.get("2026-07-23")?.huiSell).toBe(4.7459);
+  });
 });
 
 describe("computeCarriedForwardFills", () => {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { REVALIDATE_SECONDS } from "@/lib/api-cache";
+import { TODAY_REVALIDATE_SECONDS } from "@/lib/api-cache";
 import type { TodayResponse } from "@/lib/api-types";
 import { parsePublishedAt } from "@/lib/date";
 import { parseTodayHtml } from "@/lib/parse-today";
@@ -9,7 +9,7 @@ import { fetchSourceHtml, TODAY_SOURCE_URL } from "@/lib/sources";
 // manually-set Cache-Control header below (that header is what's actually
 // respected under self-hosting / other platforms, so we keep both). Next.js
 // statically analyzes this export, so it must stay a literal — keep it equal
-// to REVALIDATE_SECONDS (used below for the header) by hand.
+// to TODAY_REVALIDATE_SECONDS (used below for the header) by hand.
 export const revalidate = 300;
 
 export async function GET() {
@@ -27,7 +27,7 @@ export async function GET() {
     };
     return NextResponse.json(body, {
       headers: {
-        "Cache-Control": `s-maxage=${REVALIDATE_SECONDS}, stale-while-revalidate`,
+        "Cache-Control": `s-maxage=${TODAY_REVALIDATE_SECONDS}, stale-while-revalidate`,
       },
     });
   } catch (error) {

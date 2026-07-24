@@ -48,3 +48,12 @@ export async function upsertRates(
 export async function getAllRates(db: RatesDb): Promise<RateRecord[]> {
   return db.getAll(STORE_NAME);
 }
+
+/** The newest date with a local record, or null if the store is empty. */
+export async function getLatestDate(db: RatesDb): Promise<string | null> {
+  const records = await getAllRates(db);
+  return records.reduce<string | null>(
+    (max, r) => (max === null || r.date > max ? r.date : max),
+    null,
+  );
+}

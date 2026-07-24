@@ -1,4 +1,9 @@
-// Shared by /api/today and /api/history: the `revalidate` route segment
-// config (used by Vercel's CDN) and the Cache-Control header (used
-// everywhere else) must stay in sync, so both read this one constant.
-export const REVALIDATE_SECONDS = 300;
+// The `revalidate` route segment config (used by Vercel's CDN) and the
+// Cache-Control header (used everywhere else) must stay in sync for each
+// route, so both read these constants.
+//
+// History and today are split: history's non-today rows never change once
+// published, so its window can be much longer; today's row is the one thing
+// users expect to see update promptly, so it keeps a short window.
+export const HISTORY_REVALIDATE_SECONDS = 3600;
+export const TODAY_REVALIDATE_SECONDS = 300;

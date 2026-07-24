@@ -1,9 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { REVALIDATE_SECONDS } from "./api-cache";
+import { TODAY_REVALIDATE_SECONDS } from "./api-cache";
 import type { HistoryResponse, TodayResponse } from "./api-types";
-import { getAllRates, openRatesDb, type RateRecord } from "./rates-db";
+import { addDays } from "./date";
+import {
+  getAllRates,
+  getLatestDate,
+  openRatesDb,
+  type RateRecord,
+} from "./rates-db";
 import { syncRates } from "./rates-sync";
 
 export interface UseRateDataResult {
@@ -40,9 +46,13 @@ export function useRateData(): UseRateDataResult {
     setIsSyncing(true);
     try {
       const db = await openRatesDb();
+      const latestLocalDate = await getLatestDate(db);
+      const historyUrl = latestLocalDate
+        ? `/api/history?datefrom=${addDays(latestLocalDate, 1)}`
+        : "/api/history";
       const [today, history] = await Promise.all([
         fetchJson<TodayResponse>("/api/today").catch(() => null),
-        fetchJson<HistoryResponse>("/api/history"),
+        fetchJson<HistoryResponse>(historyUrl),
       ]);
       await syncRates(db, today, history);
       setRecords(await getAllRates(db));
@@ -85,7 +95,7 @@ export function useRateData(): UseRateDataResult {
     function handleVisibilityChange() {
       if (document.visibilityState !== "visible") return;
       const elapsedMs = Date.now() - lastSyncedAtRef.current;
-      if (elapsedMs < REVALIDATE_SECONDS * 1000) return;
+      if (elapsedMs < TODAY_REVALIDATE_SECONDS * 1000) return;
       void refresh();
     }
 

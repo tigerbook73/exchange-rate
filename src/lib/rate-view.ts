@@ -1,4 +1,4 @@
-import { getBeijingDateString } from "./date";
+import { addDays, getBeijingDateString } from "./date";
 import type { RateRecord } from "./rates-db";
 
 export type RangeOption = "7d" | "30d" | "all";
@@ -50,16 +50,6 @@ export interface ChartPoint {
   isCarriedForward: boolean;
 }
 
-function addDays(date: string, delta: number): string {
-  const [year, month, day] = date.split("-").map(Number);
-  const utc = new Date(Date.UTC(year, month - 1, day));
-  utc.setUTCDate(utc.getUTCDate() + delta);
-  const y = utc.getUTCFullYear();
-  const m = String(utc.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(utc.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 const RANGE_DAYS: Record<Exclude<RangeOption, "all">, number> = {
   "7d": 7,
   "30d": 30,
@@ -69,7 +59,7 @@ const RANGE_DAYS: Record<Exclude<RangeOption, "all">, number> = {
  * Builds a continuous per-day series for the chart. Days with no local
  * record (real or carried-forward) become `huiSell: null`, which breaks the
  * line — these are the genuinely unrecoverable gaps (source never had them,
- * or the device missed the 28-day window entirely).
+ * or the device hasn't synced far enough back to have a local record).
  */
 export function buildChartSeries(
   records: RateRecord[],

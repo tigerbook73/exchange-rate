@@ -1,4 +1,5 @@
 import type { HistoryResponse, TodayResponse } from "./api-types";
+import { addDays, getBeijingDateString } from "./date";
 import {
   getAllRates,
   upsertRates,
@@ -7,17 +8,21 @@ import {
 } from "./rates-db";
 
 /**
- * Merges /api/today and /api/history into RateRecord[]. When both cover the
- * same date, the "today" record wins (it carries a real publishedAt),
- * everything else from the series is source: "history".
+ * Merges /api/today and /api/history into RateRecord[]. Today's row is only
+ * ever taken from /api/today — /api/history is cached for up to an hour, so
+ * its copy of today's row can be stale; if /api/today fails, today simply
+ * stays whatever was already in IndexedDB (or absent) rather than falling
+ * back to that stale value.
  */
 export function toRateRecords(
   today: TodayResponse | null,
   history: HistoryResponse,
+  todayDate: string = today?.date ?? getBeijingDateString(),
 ): RateRecord[] {
   const records = new Map<string, RateRecord>();
 
   for (const point of history.series) {
+    if (point.date === todayDate) continue;
     records.set(point.date, {
       date: point.date,
       huiSell: point.huiSell,
@@ -40,20 +45,10 @@ export function toRateRecords(
   return [...records.values()];
 }
 
-function addOneDay(date: string): string {
-  const [year, month, day] = date.split("-").map(Number);
-  const utc = new Date(Date.UTC(year, month - 1, day));
-  utc.setUTCDate(utc.getUTCDate() + 1);
-  const y = utc.getUTCFullYear();
-  const m = String(utc.getUTCMonth() + 1).padStart(2, "0");
-  const d = String(utc.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
 /** Every calendar date from `start` to `end`, inclusive. */
 function enumerateDateRange(start: string, end: string): string[] {
   const dates: string[] = [];
-  for (let cursor = start; cursor <= end; cursor = addOneDay(cursor)) {
+  for (let cursor = start; cursor <= end; cursor = addDays(cursor, 1)) {
     dates.push(cursor);
   }
   return dates;
@@ -107,7 +102,9 @@ export function computeCarriedForwardFills(
 
 /**
  * One full sync pass: merge real API data into IndexedDB, then fill any
- * gaps within the fetched 28-day window with marked carried-forward values.
+ * gaps within the fetched /api/history window (which shrinks to just the
+ * gap since the last sync once a device has local history) with marked
+ * carried-forward values.
  */
 export async function syncRates(
   db: RatesDb,
