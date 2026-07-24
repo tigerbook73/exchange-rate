@@ -58,7 +58,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - 写代码前先读 `node_modules/next/dist/docs/` 里对应指南，不要凭训练数据里的旧 API 假设。
 - Route Handler 的 `GET` **默认不缓存**（Next 15+ 起的行为）；本项目依赖的是手动设置 `Cache-Control: s-maxage=...` 响应头走 Vercel 边缘缓存，与 Next 内部的 fetch/route 缓存是两套机制，不要混淆、也不需要额外配置 `export const dynamic = 'force-static'`。
 - `params`、`searchParams`、`cookies()`、`headers()` 等一律是异步的（返回 Promise），需要 `await`。
-- `next dev` / `next build` 默认用 Turbopack（无需 `--turbopack` 参数），若未来引入自定义 Webpack 配置需注意兼容性。**已踩坑**：`@serwist/next` 底层是 webpack 插件，和 Turbopack 冲突（`next build` 直接报错）。本项目的解法：`next.config.ts` 里 `disable: process.env.NODE_ENV !== "production"` 让开发环境保持 Turbopack + 禁用 Serwist；`package.json` 的 `build` 脚本固定用 `next build --webpack`。新增其他也依赖 webpack 插件机制的工具时，先假设它和 Turbopack 不兼容，别默认它能直接工作。
+- `next dev` / `next build` 默认用 Turbopack（无需 `--turbopack` 参数），若未来引入自定义 Webpack 配置需注意兼容性。**已踩坑**：`@serwist/next` 底层是 webpack 插件，next.config 里只要挂了 `webpack(...)` 函数，Turbopack 就会报错拒绝启动——**光靠运行时 `disable: true` 不够**，因为 `withSerwistInit` 不管 `disable` 是什么都会往 config 上挂 `webpack` 键，Next 是看这个键是否存在来判断冲突，不是看它实际会不会执行。真正生效的解法是 `dev`、`build` 两个 script 都显式加 `--webpack`（`next dev --webpack` / `next build --webpack`），`disable: process.env.NODE_ENV !== "production"` 只用来跳过开发环境下没意义的 SW 编译，不能替代 `--webpack`。评估过官方的 `@serwist/turbopack`（esbuild + Route Handler 动态提供 SW，原生免 webpack）作为替代，但集成方式整个不一样（要重写 next.config + 新建 route），官方自己也标了"实验性支持"，权衡后维持 `--webpack` 方案。新增其他依赖 webpack 插件机制的工具时，先假设它和 Turbopack 不兼容，别默认它能直接工作。
 - 中间件文件约定已从 `middleware.ts` 改名为 `proxy.ts`（本项目目前不需要中间件/proxy，若后续要加，用新约定名）。
 
 ## 依赖版本与脚手架
@@ -141,7 +141,7 @@ docs/plans/
 
 - 覆盖真实浏览器里的关键用户路径：加载首页看到购汇价卡片、切换时间范围（7 天/30 天/全部）、切换主题（亮/暗/跟随系统）、下拉刷新、离线状态下展示已缓存数据等。
 - **必须用 `page.route()` mock 掉 `/api/today`、`/api/history` 的响应**，不依赖真实网络或 `kylc.com`——原因和单测里不直接请求源站一致：避免测试脆弱、避免拖慢/污染源站，也让空档/跨年等边界场景可以用固定 mock 数据稳定复现（否则依赖当天真实数据，边界场景很难测到）。
-- Playwright 配置（`playwright.config.ts`）已配好 `webServer`，跑 `pnpm test:e2e` 会自动拉起 `next dev` 并等待就绪，不需要手动先起 dev server。
+- Playwright 配置（`playwright.config.ts`）已配好 `webServer`，理论上跑 `pnpm test:e2e` 会自动拉起 `next dev` 并等待就绪，不需要手动先起 dev server。**已知问题**：在某些环境下（本项目开发过程中遇到过），Playwright 自己 spawn 的 dev server 会在首次编译时卡死不返回，但手动先跑 `pnpm dev`、等它就绪后再跑 `pnpm test:e2e`（这时 Playwright 会复用已有的 server）每次都稳定。没有完全定位到根因（怀疑是沙箱环境下的进程/端口状态问题，不是应用本身的缺陷——同样的 mock 逻辑对着手动起的 server 反复验证过都是对的）。`pnpm test:e2e` 卡住不返回时，直接用这个手动预热的方式绕过去，不用继续深挖。
 - 当前只跑 Chromium 一个浏览器项目（个人项目，不需要跨浏览器矩阵）；如果以后发现要覆盖 Safari 特有的 PWA/离线行为，再按需加 webkit 项目。
 - 从 Phase 4（首页 UI）开始，每个改动用户可见路径的阶段都要新增/更新对应 e2e case，作为该阶段验收标准的一部分；Phase 1-3（脚手架/API/IndexedDB）没有面向用户的 UI，暂不强制写 e2e，用单测覆盖即可。
 

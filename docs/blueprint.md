@@ -163,10 +163,11 @@
 - `manifest`：用 Next.js App Router 的 `src/app/manifest.ts` 文件约定生成（自动产出 `/manifest.webmanifest` 并在 `<head>` 里自动加 `<link rel="manifest">`，不需要手写静态 `manifest.json` 或手动加 link 标签）。图标用 Playwright 截图一个简单的 HTML（蓝底白字"汇"）生成 192×192 / 512×512 / 180×180（iOS `apple-touch-icon`）三个 PNG，放在 `public/icons/`。
 - 主题色：`manifest.ts` 里的 `theme_color` 只能给一个静态值（品牌蓝 `#2563eb`）；亮/暗两套 `theme-color` 通过 `src/app/layout.tsx` 的 `viewport.themeColor` 数组（`[{media, color}, ...]`）实现，对应实际的亮/暗背景色。
 - Service Worker：`src/app/sw.ts` 用 `serwist` 包的 `Serwist` 类手写，`runtimeCaching` 直接复用 `@serwist/next/worker` 导出的 `defaultCache`——它已经内置了"静态资源 cache-first / stale-while-revalidate"+"同源 `/api/*` 用 `NetworkFirst`（10 秒超时）"这套策略，和本节最初的设计要求刚好一致，**不需要自己写自定义 runtimeCaching 规则**。
-- **重要坑（已解决）**：`@serwist/next` 底层是 webpack 插件，而 Next 16 的 `next dev`/`next build` 默认用 Turbopack，两者冲突（`next build` 会直接报错）。解决方式：
-  - `next.config.ts` 里 `withSerwistInit({ ..., disable: process.env.NODE_ENV !== "production" })`，开发模式直接禁用 Serwist（本来 `defaultCache` 在非生产环境也会退化成纯 `NetworkOnly`，禁用没有任何实际损失），让 `next dev` 继续用 Turbopack。
-  - `package.json` 的 `build` 脚本改成 `next build --webpack`，生产构建显式退回 webpack。
-  - `tsconfig.json` 的 `exclude` 里加 `src/app/sw.ts`（它需要 `webworker` 而不是 `dom` 的类型环境，和主程序的 tsconfig 冲突，排除后 `pnpm typecheck` 不检查它，但 webpack 构建时依然会正确编译）。
+- **重要坑（已解决）**：`@serwist/next` 底层是 webpack 插件，而 Next 16 的 `next dev`/`next build` 默认用 Turbopack，两者冲突（直接报错拒绝启动/构建）。解决方式：
+  - `next.config.ts` 里 `withSerwistInit({ ..., disable: process.env.NODE_ENV !== "production" })`：这一步**只是**让开发环境跳过 SW 的实际编译逻辑（`defaultCache` 在非生产环境本来就会退化成纯 `NetworkOnly`，跳过没有任何实际损失），**不能单独解决 Turbopack 冲突**——`withSerwistInit` 不管 `disable` 是什么都会往返回的 config 上挂一个 `webpack(...)` 函数，Next 是看这个函数存不存在来判断"是不是有自定义 webpack 配置"，不是看它会不会真的执行到。
+  - 真正解决冲突要靠：`package.json` 的 `dev` 和 `build` 两个脚本都显式加 `--webpack`（`next dev --webpack` / `next build --webpack`），完全不让 Turbopack 参与，两者缺一不可（只加 build 不加 dev，dev 环境下改几次文件触发重新编译后一样会报错）。
+  - 评估过官方新出的 `@serwist/turbopack`（用 esbuild 代替 webpack、把 SW 改成 Route Handler 动态提供，原生兼容 Turbopack）作为替代方案，但它的集成方式和现在的 `@serwist/next` 完全不同（要重写 `next.config.ts`、新增一个 route 文件），而且官方文档里自己标注为"实验性支持"；权衡稳定性后维持 `--webpack` 方案，没有切换。
+  - `src/app/sw/sw.ts` 需要 `webworker` 类型环境（`self`、`ServiceWorkerGlobalScope` 等），和主程序 tsconfig 的 `dom` 环境冲突，不能共用一个 tsconfig。**注意**：一开始在项目根目录另建一个同级的 `tsconfig.worker.json`（文件名不同、目录相同）不够——VS Code 给某个文件配对 tsconfig 是按"从该文件所在目录往上找最近的、名字就叫 `tsconfig.json` 的文件"来定的，同目录下改名的兄弟文件它不会主动发现，编辑器还是会用根 `tsconfig.json`（`dom` 环境）检查这个文件，照样报 `Cannot find name 'ServiceWorkerGlobalScope'`。正确做法是**把 sw 相关文件单独放一个子目录、且子目录里的 tsconfig 文件名必须叫 `tsconfig.json`**：`src/app/sw/{sw.ts, tsconfig.json}`（子目录里的 `tsconfig.json` 设 `lib: ["ES2020", "WebWorker"]`，只 `include: ["sw.ts"]`），这样 VS Code 打开 `src/app/sw/sw.ts` 时会先找到这个更近的 `tsconfig.json`。根 `tsconfig.json` 的 `exclude` 加 `src/app/sw`，`pnpm typecheck` 依次跑 `tsc --noEmit && tsc --noEmit -p src/app/sw/tsconfig.json`，两边都有类型检查覆盖。
 - **已验证的行为（非 bug，PWA 通用特性）**：Service Worker 首次安装时不会控制"触发安装的那次页面加载"，要等下一次导航才会真正接管请求。所以"离线也能重新打开 App"这个场景，测试/验证时要先完整访问 → 再刷新一次（在线状态下，让 SW 接管这次导航并把页面缓存进去）→ 才能断网重载验证，否则会看到离线直接加载失败（这不是这个项目的缺陷，是所有基于 Service Worker 的 PWA 的通用行为）。
 - 添加到主屏幕的引导提示：未实现（按原计划为可选项）。
 

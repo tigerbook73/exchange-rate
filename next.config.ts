@@ -4,7 +4,7 @@ import withSerwistInit from "@serwist/next";
 const nextConfig: NextConfig = {};
 
 const withSerwist = withSerwistInit({
-  swSrc: "src/app/sw.ts",
+  swSrc: "src/app/sw/sw.ts",
   swDest: "public/sw.js",
   // @serwist/next injects a webpack config, which Next 16's Turbopack (the
   // default for `next dev`) doesn't support. Disabling it in dev is a no-op
