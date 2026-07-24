@@ -78,6 +78,11 @@ export function RateChart({ points }: { points: ChartPoint[] }) {
   const colors =
     mounted && resolvedTheme === "dark" ? PALETTE.dark : PALETTE.light;
 
+  // Beyond ~30 days there are too many points for individual markers to
+  // stay legible, so only the line itself is shown; the carried-forward
+  // "hollow circle" marking still works via tooltip at any range.
+  const showMarkers = points.length <= 30;
+
   const data = {
     labels: points.map((p) => p.date.slice(5)), // "MM-DD"
     datasets: [
@@ -87,9 +92,10 @@ export function RateChart({ points }: { points: ChartPoint[] }) {
         backgroundColor: colors.line,
         borderWidth: 2,
         spanGaps: false,
-        pointRadius: points.map((p) =>
-          p.huiSell === null ? 0 : p.isCarriedForward ? 5 : 3,
-        ),
+        pointRadius: points.map((p) => {
+          if (p.huiSell === null || !showMarkers) return 0;
+          return p.isCarriedForward ? 5 : 3;
+        }),
         pointBackgroundColor: points.map((p) =>
           p.isCarriedForward ? "transparent" : colors.line,
         ),

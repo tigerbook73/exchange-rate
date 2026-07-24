@@ -1,7 +1,14 @@
 import { Button } from "@/components/ui/button";
 import { RANGE_LABELS, type RangeOption } from "@/lib/rate-view";
 
-const RANGE_OPTIONS: RangeOption[] = ["7d", "30d", "all"];
+const RANGE_OPTIONS: RangeOption[] = [
+  "7d",
+  "30d",
+  "60d",
+  "90d",
+  "180d",
+  "365d",
+];
 
 export function RangeToggle({
   value,
@@ -11,10 +18,14 @@ export function RangeToggle({
   onChange: (value: RangeOption) => void;
 }) {
   return (
-    <div className="flex items-center gap-1" role="group" aria-label="时间范围">
+    <div
+      className="flex flex-wrap items-center justify-center gap-1"
+      role="group"
+      aria-label="时间范围"
+    >
       {RANGE_OPTIONS.map((option) => (
         <Button
-          className="px-4 text-base"
+          className="text-base"
           key={option}
           type="button"
           size="lg"

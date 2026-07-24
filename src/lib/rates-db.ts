@@ -57,3 +57,12 @@ export async function getLatestDate(db: RatesDb): Promise<string | null> {
     null,
   );
 }
+
+/** The oldest date with a local record, or null if the store is empty. */
+export async function getEarliestDate(db: RatesDb): Promise<string | null> {
+  const records = await getAllRates(db);
+  return records.reduce<string | null>(
+    (min, r) => (min === null || r.date < min ? r.date : min),
+    null,
+  );
+}

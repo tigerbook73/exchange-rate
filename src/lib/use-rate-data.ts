@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { TODAY_REVALIDATE_SECONDS } from "./api-cache";
+import { HISTORY_LOOKBACK_DAYS, TODAY_REVALIDATE_SECONDS } from "./api-cache";
 import type { HistoryResponse, TodayResponse } from "./api-types";
-import { addDays } from "./date";
+import { addDays, getBeijingDateString } from "./date";
 import {
   getAllRates,
+  getEarliestDate,
   getLatestDate,
   openRatesDb,
   type RateRecord,
@@ -46,10 +47,24 @@ export function useRateData(): UseRateDataResult {
     setIsSyncing(true);
     try {
       const db = await openRatesDb();
-      const latestLocalDate = await getLatestDate(db);
-      const historyUrl = latestLocalDate
-        ? `/api/history?datefrom=${addDays(latestLocalDate, 1)}`
-        : "/api/history";
+      const [latestLocalDate, earliestLocalDate] = await Promise.all([
+        getLatestDate(db),
+        getEarliestDate(db),
+      ]);
+      // Local history might exist but not go back far enough yet — e.g. a
+      // device that only ever ran an older build that capped it at ~28 days.
+      // In that case a plain incremental fetch would never backfill the
+      // missing older days, so fall back to a full re-backfill instead.
+      const backfillBoundary = addDays(
+        getBeijingDateString(),
+        -HISTORY_LOOKBACK_DAYS,
+      );
+      const needsBackfill =
+        !earliestLocalDate || earliestLocalDate > backfillBoundary;
+      const historyUrl =
+        latestLocalDate && !needsBackfill
+          ? `/api/history?datefrom=${addDays(latestLocalDate, 1)}`
+          : "/api/history";
       const [today, history] = await Promise.all([
         fetchJson<TodayResponse>("/api/today").catch(() => null),
         fetchJson<HistoryResponse>(historyUrl),

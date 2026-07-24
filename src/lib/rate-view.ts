@@ -1,12 +1,15 @@
 import { addDays, getBeijingDateString } from "./date";
 import type { RateRecord } from "./rates-db";
 
-export type RangeOption = "7d" | "30d" | "all";
+export type RangeOption = "7d" | "30d" | "60d" | "90d" | "180d" | "365d";
 
 export const RANGE_LABELS: Record<RangeOption, string> = {
   "7d": "7 天",
   "30d": "30 天",
-  all: "全部",
+  "60d": "60 天",
+  "90d": "90 天",
+  "180d": "半年",
+  "365d": "一年",
 };
 
 export interface CurrentRateView {
@@ -50,9 +53,13 @@ export interface ChartPoint {
   isCarriedForward: boolean;
 }
 
-const RANGE_DAYS: Record<Exclude<RangeOption, "all">, number> = {
+const RANGE_DAYS: Record<RangeOption, number> = {
   "7d": 7,
   "30d": 30,
+  "60d": 60,
+  "90d": 90,
+  "180d": 180,
+  "365d": 365,
 };
 
 /**
@@ -71,15 +78,7 @@ export function buildChartSeries(
   }
 
   const byDate = new Map(records.map((r) => [r.date, r]));
-  const earliestLocalDate = records.reduce(
-    (min, r) => (r.date < min ? r.date : min),
-    records[0]!.date,
-  );
-
-  const startDate =
-    range === "all"
-      ? earliestLocalDate
-      : addDays(today, -(RANGE_DAYS[range] - 1));
+  const startDate = addDays(today, -(RANGE_DAYS[range] - 1));
 
   const points: ChartPoint[] = [];
   for (let date = startDate; date <= today; date = addDays(date, 1)) {

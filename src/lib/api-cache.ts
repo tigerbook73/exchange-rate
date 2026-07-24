@@ -7,3 +7,9 @@
 // users expect to see update promptly, so it keeps a short window.
 export const HISTORY_REVALIDATE_SECONDS = 3600;
 export const TODAY_REVALIDATE_SECONDS = 300;
+
+// How far back /api/history looks when the caller doesn't (or can't yet)
+// request an incremental `datefrom`. Shared with the client (see
+// use-rate-data.ts) so it can tell whether local history already reaches
+// this far back, or still needs a one-time backfill request.
+export const HISTORY_LOOKBACK_DAYS = 365;

@@ -103,13 +103,13 @@ describe("buildChartSeries", () => {
     });
   });
 
-  it("'all' spans from the earliest local record to today, not a fixed window", () => {
+  it("'365d' spans a full year ending at 'today'", () => {
     const records = [real("2026-06-01", 4.7), real("2026-07-24", 4.75)];
 
-    const series = buildChartSeries(records, "all", "2026-07-24");
+    const series = buildChartSeries(records, "365d", "2026-07-24");
 
-    expect(series[0]?.date).toBe("2026-06-01");
+    expect(series[0]?.date).toBe("2025-07-25");
     expect(series.at(-1)?.date).toBe("2026-07-24");
-    expect(series).toHaveLength(54);
+    expect(series).toHaveLength(365);
   });
 });

@@ -1,5 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { HISTORY_REVALIDATE_SECONDS } from "@/lib/api-cache";
+import {
+  HISTORY_LOOKBACK_DAYS,
+  HISTORY_REVALIDATE_SECONDS,
+} from "@/lib/api-cache";
 import type { HistoryResponse } from "@/lib/api-types";
 import { addDays, getBeijingDateString } from "@/lib/date";
 import { parseHistoryHtml } from "@/lib/parse-history";
@@ -12,18 +15,18 @@ import { fetchSourceHtml, HISTORY_SOURCE_URL } from "@/lib/sources";
 export const revalidate = 3600;
 
 const DATEFROM_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const DEFAULT_LOOKBACK_DAYS = 365;
 
-// Callers (see rates-sync.ts) pass the day after the newest date they
+// Callers (see use-rate-data.ts) pass the day after the newest date they
 // already have locally, so repeat visits only request the gap since last
-// sync. No local data (first visit) means no `datefrom`, and we fall back to
-// a full year — the source has no built-in "everything" option.
+// sync. No/invalid `datefrom` (first visit, or local history not yet deep
+// enough — see HISTORY_LOOKBACK_DAYS) falls back to a full year — the source
+// has no built-in "everything" option.
 function resolveDatefrom(request: NextRequest): string {
   const raw = request.nextUrl.searchParams.get("datefrom");
   if (raw && DATEFROM_PATTERN.test(raw)) {
     return raw;
   }
-  return addDays(getBeijingDateString(), -DEFAULT_LOOKBACK_DAYS);
+  return addDays(getBeijingDateString(), -HISTORY_LOOKBACK_DAYS);
 }
 
 export async function GET(request: NextRequest) {
