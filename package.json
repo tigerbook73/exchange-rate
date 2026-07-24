@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit && tsc --noEmit -p src/app/sw/tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "verify": "pnpm run format:check && pnpm run lint && pnpm typecheck && pnpm run test && pnpm run test:e2e"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
