@@ -16,7 +16,7 @@ export function RangeToggle({
         <Button
           key={option}
           type="button"
-          size="sm"
+          size="lg"
           variant={value === option ? "default" : "outline"}
           aria-pressed={value === option}
           onClick={() => onChange(option)}

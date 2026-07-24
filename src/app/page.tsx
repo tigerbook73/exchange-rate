@@ -25,7 +25,7 @@ export default function Home() {
   );
 
   return (
-    <main className="flex h-full w-full flex-1 flex-col items-center gap-6 p-6 sm:gap-8 sm:p-8">
+    <main className="flex h-full min-h-0 w-full flex-1 flex-col items-center gap-6 overflow-hidden p-6 sm:gap-8 sm:p-8">
       {pullDistance > 0 ? (
         <div
           className="text-xs text-muted-foreground"
@@ -50,8 +50,8 @@ export default function Home() {
 
       <InstallButton />
 
-      <p className="max-w-md text-center text-xs text-muted-foreground">
-        数据来自快易理财网，仅供参考，以银行官网实际成交汇率为准。
+      <p className="w-full max-w-md text-left text-xs text-muted-foreground">
+        数据来自快易理财网，仅供参考。
       </p>
     </main>
   );

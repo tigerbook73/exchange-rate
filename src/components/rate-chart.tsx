@@ -92,18 +92,9 @@ export function RateChart({ points }: { points: ChartPoint[] }) {
     },
   };
 
-  const hasCarriedForwardPoint = points.some((p) => p.isCarriedForward);
-
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="relative min-h-0 flex-1">
-        <Line data={data} options={options} />
-      </div>
-      {hasCarriedForwardPoint ? (
-        <p className="mt-1 text-right text-xs text-muted-foreground">
-          ○ 空心点：数据未更新，沿用前一日
-        </p>
-      ) : null}
+    <div className="relative min-h-0 flex-1">
+      <Line data={data} options={options} />
     </div>
   );
 }
