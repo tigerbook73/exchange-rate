@@ -1,14 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { RANGE_LABELS, type RangeOption } from "@/lib/rate-view";
 
-const RANGE_OPTIONS: RangeOption[] = [
-  "7d",
-  "30d",
-  "60d",
-  "90d",
-  "180d",
-  "365d",
-];
+const RANGE_OPTIONS: RangeOption[] = ["7d", "30d", "90d", "180d", "365d"];
 
 export function RangeToggle({
   value,

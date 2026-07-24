@@ -1,12 +1,11 @@
 import { addDays, getBeijingDateString } from "./date";
 import type { RateRecord } from "./rates-db";
 
-export type RangeOption = "7d" | "30d" | "60d" | "90d" | "180d" | "365d";
+export type RangeOption = "7d" | "30d" | "90d" | "180d" | "365d";
 
 export const RANGE_LABELS: Record<RangeOption, string> = {
   "7d": "7 天",
   "30d": "30 天",
-  "60d": "60 天",
   "90d": "90 天",
   "180d": "半年",
   "365d": "一年",
@@ -56,7 +55,6 @@ export interface ChartPoint {
 const RANGE_DAYS: Record<RangeOption, number> = {
   "7d": 7,
   "30d": 30,
-  "60d": 60,
   "90d": 90,
   "180d": 180,
   "365d": 365,
