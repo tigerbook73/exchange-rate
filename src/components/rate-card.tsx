@@ -23,17 +23,17 @@ export function RateCard({
   isSyncing: boolean;
 }) {
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-md min-h-[30%]">
       <CardHeader>
         <CardTitle className="text-sm font-normal text-muted-foreground">
           工商银行 澳元 购汇价（现汇卖出）
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <p className="text-4xl font-semibold tabular-nums">
+        <p className="text-6xl font-semibold tabular-nums">
           {rate ? rate.huiSell.toFixed(4) : "－－－－"}
         </p>
-        <p className="mt-1 text-xs text-muted-foreground">
+        <p className="mt-2 text-sm text-muted-foreground">
           {rate
             ? rate.publishedAt
               ? `更新于 ${formatUpdatedAt(rate.publishedAt)}`

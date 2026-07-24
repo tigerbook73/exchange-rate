@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { InstallButton } from "@/components/install-button";
 import { RangeToggle } from "@/components/range-toggle";
 import { RateCard } from "@/components/rate-card";
 import { RateChart } from "@/components/rate-chart";
@@ -24,7 +25,7 @@ export default function Home() {
   );
 
   return (
-    <main className="flex flex-1 flex-col items-center gap-6 p-6">
+    <main className="flex h-full w-full flex-1 flex-col items-center gap-6 p-6 sm:gap-8 sm:p-8">
       {pullDistance > 0 ? (
         <div
           className="text-xs text-muted-foreground"
@@ -42,12 +43,14 @@ export default function Home() {
         </p>
       ) : null}
 
-      <div className="flex w-full max-w-sm flex-col gap-2">
+      <div className="flex w-full max-w-md min-h-0 flex-1 flex-col gap-3">
         <RangeToggle value={range} onChange={setRange} />
         <RateChart points={chartPoints} />
       </div>
 
-      <p className="max-w-sm text-center text-xs text-muted-foreground">
+      <InstallButton />
+
+      <p className="max-w-md text-center text-xs text-muted-foreground">
         数据来自快易理财网，仅供参考，以银行官网实际成交汇率为准。
       </p>
     </main>
