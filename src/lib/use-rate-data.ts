@@ -51,23 +51,39 @@ export function useRateData(): UseRateDataResult {
         getLatestDate(db),
         getEarliestDate(db),
       ]);
+      const beijingToday = getBeijingDateString();
       // Local history might exist but not go back far enough yet — e.g. a
       // device that only ever ran an older build that capped it at ~28 days.
       // In that case a plain incremental fetch would never backfill the
       // missing older days, so fall back to a full re-backfill instead.
-      const backfillBoundary = addDays(
-        getBeijingDateString(),
-        -HISTORY_LOOKBACK_DAYS,
-      );
+      const backfillBoundary = addDays(beijingToday, -HISTORY_LOOKBACK_DAYS);
       const needsBackfill =
         !earliestLocalDate || earliestLocalDate > backfillBoundary;
+      // The local record for `latestLocalDate` may only be a same-day
+      // /api/today snapshot (grabbed before that day's rate was finalized),
+      // not yet confirmed against /api/history — so re-request that date
+      // too (`datefrom = latestLocalDate`, not `+ 1`) rather than treating
+      // it as settled just because we have *some* value for it. Once
+      // history returns a row for that date it overwrites the /api/today-
+      // sourced one (see toRateRecords), correcting it if needed.
+      // Only skip entirely once local history is caught up to today itself
+      // — today's row always comes from /api/today, never /api/history (see
+      // toRateRecords), so a history call at that point has nothing to add.
+      const upToDate = !needsBackfill && latestLocalDate === beijingToday;
       const historyUrl =
         latestLocalDate && !needsBackfill
-          ? `/api/history?datefrom=${addDays(latestLocalDate, 1)}`
+          ? `/api/history?datefrom=${latestLocalDate}`
           : "/api/history";
       const [today, history] = await Promise.all([
         fetchJson<TodayResponse>("/api/today").catch(() => null),
-        fetchJson<HistoryResponse>(historyUrl),
+        upToDate
+          ? Promise.resolve<HistoryResponse>({
+              currency: "aud",
+              bank: "icbc",
+              field: "huiSell",
+              series: [],
+            })
+          : fetchJson<HistoryResponse>(historyUrl),
       ]);
       await syncRates(db, today, history);
       setRecords(await getAllRates(db));

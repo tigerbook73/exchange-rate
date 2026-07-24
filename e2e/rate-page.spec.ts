@@ -65,7 +65,7 @@ test("switches chart range without errors", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByText("4.7500")).toBeVisible();
 
-  for (const label of ["7 天", "全部", "30 天"]) {
+  for (const label of ["7 天", "一年", "30 天"]) {
     await page.getByRole("button", { name: label, exact: true }).click();
     await expect(
       page.getByRole("button", { name: label, exact: true }),
