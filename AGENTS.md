@@ -33,18 +33,18 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## 技术栈约束
 
-| 层        | 选型                                                                         | 备注                                                                                                                                                         |
-| --------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 框架      | Next.js（App Router）                                                        |                                                                                                                                                              |
-| HTML 解析 | cheerio                                                                      | 仅服务端（Route Handler）使用                                                                                                                                |
-| UI 组件   | shadcn/ui（基于 Tailwind CSS，底层原语库为 **Base UI**，非早期版本的 Radix） | 组件用 `npx shadcn add` 按需引入，不要手写重复造轮子的基础组件（Button/Card/Dialog 等）；深度定制样式优先改 Tailwind 配置/CSS 变量，而不是绕开 shadcn 自己写 |
-| 主题      | 支持亮色/暗色（浅色为默认，跟随系统 `prefers-color-scheme`，并提供手动切换） | 见下方「主题支持」                                                                                                                                           |
-| 图表      | Chart.js + react-chartjs-2                                                   | 两者配合使用（后者是前者的 React 封装），需适配主题色（暗色模式下网格线/文字颜色要跟着变）                                                                   |
-| 本地存储  | IndexedDB（通过 `idb` 库封装）                                               |                                                                                                                                                              |
-| PWA       | `@serwist/next`                                                              | 不用 `next-pwa`（对 App Router 兼容性差、维护停滞）；若 `@serwist/next` 落地遇阻，退化为手写精简 service worker                                              |
-| E2E 测试  | Playwright（`@playwright/test`）                                             | 见下方「测试规范」；配置在根目录 `playwright.config.ts`，用例放 `e2e/`                                                                                       |
-| 部署      | Vercel Hobby（免费版）                                                       | 无 Cron、无数据库                                                                                                                                            |
-| 包管理器  | pnpm                                                                         | 遵循用户全局 CLAUDE.md 约定                                                                                                                                  |
+| 层        | 选型                                                                         | 备注                                                                                                                                                                                                    |
+| --------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 框架      | Next.js（App Router）                                                        |                                                                                                                                                                                                         |
+| HTML 解析 | cheerio                                                                      | 仅服务端（Route Handler）使用                                                                                                                                                                           |
+| UI 组件   | shadcn/ui（基于 Tailwind CSS，底层原语库为 **Base UI**，非早期版本的 Radix） | 组件用 `npx shadcn add` 按需引入，不要手写重复造轮子的基础组件（Button/Card/Dialog 等）；深度定制样式优先改 Tailwind 配置/CSS 变量，而不是绕开 shadcn 自己写                                            |
+| 主题      | 支持亮色/暗色（浅色为默认，跟随系统 `prefers-color-scheme`，并提供手动切换） | 见下方「主题支持」                                                                                                                                                                                      |
+| 图表      | Chart.js + react-chartjs-2                                                   | 两者配合使用（后者是前者的 React 封装），需适配主题色（暗色模式下网格线/文字颜色要跟着变）                                                                                                              |
+| 本地存储  | IndexedDB（通过 `idb` 库封装）                                               |                                                                                                                                                                                                         |
+| PWA       | `@serwist/next`                                                              | 不用 `next-pwa`（对 App Router 兼容性差、维护停滞）；`runtimeCaching` 直接用其 `defaultCache`（已内置 `/api/*` 走 NetworkFirst），不用自己写缓存规则；与 Turbopack 冲突，见下方「Next.js 版本注意事项」 |
+| E2E 测试  | Playwright（`@playwright/test`）                                             | 见下方「测试规范」；配置在根目录 `playwright.config.ts`，用例放 `e2e/`                                                                                                                                  |
+| 部署      | Vercel Hobby（免费版）                                                       | 无 Cron、无数据库                                                                                                                                                                                       |
+| 包管理器  | pnpm                                                                         | 遵循用户全局 CLAUDE.md 约定                                                                                                                                                                             |
 
 ## 主题支持（新增要求）
 
@@ -58,7 +58,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 - 写代码前先读 `node_modules/next/dist/docs/` 里对应指南，不要凭训练数据里的旧 API 假设。
 - Route Handler 的 `GET` **默认不缓存**（Next 15+ 起的行为）；本项目依赖的是手动设置 `Cache-Control: s-maxage=...` 响应头走 Vercel 边缘缓存，与 Next 内部的 fetch/route 缓存是两套机制，不要混淆、也不需要额外配置 `export const dynamic = 'force-static'`。
 - `params`、`searchParams`、`cookies()`、`headers()` 等一律是异步的（返回 Promise），需要 `await`。
-- `next dev` / `next build` 默认用 Turbopack（无需 `--turbopack` 参数），若未来引入自定义 Webpack 配置需注意兼容性。
+- `next dev` / `next build` 默认用 Turbopack（无需 `--turbopack` 参数），若未来引入自定义 Webpack 配置需注意兼容性。**已踩坑**：`@serwist/next` 底层是 webpack 插件，和 Turbopack 冲突（`next build` 直接报错）。本项目的解法：`next.config.ts` 里 `disable: process.env.NODE_ENV !== "production"` 让开发环境保持 Turbopack + 禁用 Serwist；`package.json` 的 `build` 脚本固定用 `next build --webpack`。新增其他也依赖 webpack 插件机制的工具时，先假设它和 Turbopack 不兼容，别默认它能直接工作。
 - 中间件文件约定已从 `middleware.ts` 改名为 `proxy.ts`（本项目目前不需要中间件/proxy，若后续要加，用新约定名）。
 
 ## 依赖版本与脚手架

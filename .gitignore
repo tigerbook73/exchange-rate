@@ -21,6 +21,11 @@
 /.next/
 /out/
 
+# serwist (generated service worker, build artifact)
+/public/sw.js
+/public/sw.js.map
+/public/swe-worker*
+
 # production
 /build
 
