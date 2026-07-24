@@ -58,3 +58,18 @@ export function parsePublishedAt(
   const publishedAt = `${date}T${pad2(hour)}:${pad2(minute)}:00+08:00`;
   return { date, publishedAt };
 }
+
+/**
+ * "Today" as an ISO date in Beijing time, independent of the viewer's own
+ * timezone — keeps date-range math consistent with how source dates are
+ * interpreted everywhere else in the app.
+ */
+export function getBeijingDateString(now: Date = new Date()): string {
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: SOURCE_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+  return formatter.format(now);
+}
