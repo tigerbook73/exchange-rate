@@ -4,6 +4,12 @@ import { useEffect, useRef, useState } from "react";
 
 const TRIGGER_DISTANCE_PX = 70;
 const MAX_PULL_PX = 110;
+// Finger movement below this threshold is ignored so a light touch/scroll
+// jitter at the top of the page doesn't reveal the pull indicator.
+const DEAD_ZONE_PX = 24;
+// Damping applied after the dead zone so the indicator follows the finger
+// more slowly, requiring a longer pull to reach TRIGGER_DISTANCE_PX.
+const PULL_RESISTANCE = 0.5;
 
 /**
  * Minimal touch-based pull-to-refresh: only engages when the page is
@@ -30,9 +36,12 @@ export function usePullToRefresh(onRefresh: () => Promise<void>) {
         return;
       }
       const delta = touch.clientY - startY.current;
-      if (delta > 0) {
-        setPullDistance(Math.min(delta, MAX_PULL_PX));
+      if (delta <= DEAD_ZONE_PX) {
+        setPullDistance(0);
+        return;
       }
+      const dampened = (delta - DEAD_ZONE_PX) * PULL_RESISTANCE;
+      setPullDistance(Math.min(dampened, MAX_PULL_PX));
     }
 
     async function onTouchEnd() {
