@@ -1,0 +1,588 @@
+<table
+  data-role="table1"
+  class="table ui-responsive table-stripe text-nowrap"
+  id="bank_rate_table"
+>
+  <thead>
+    <tr>
+      <th>&nbsp;币种</th>
+      <th>
+        现汇买入&nbsp;<a href="javascript:show_comment('hui_buy')"
+          ><i class="fa fa-question-circle"></i
+        ></a>
+      </th>
+      <th>
+        现钞买入&nbsp;<a href="javascript:show_comment('chao_buy')"
+          ><i class="fa fa-question-circle"></i
+        ></a>
+      </th>
+      <th>
+        现汇卖出&nbsp;<a href="javascript:show_comment('hui_sell')"
+          ><i class="fa fa-question-circle"></i
+        ></a>
+      </th>
+      <th>
+        现钞卖出&nbsp;<a href="javascript:show_comment('chao_sell')"
+          ><i class="fa fa-question-circle"></i
+        ></a>
+      </th>
+      <th>发布时间</th>
+      <th style="text-align: center">比较</th>
+      <th style="text-align: center">走势</th>
+      <th style="text-align: center">
+        到价提醒&nbsp;<a href="javascript:show_comment('reminder')"
+          ><i class="fa fa-question-circle"></i
+        ></a>
+      </th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;港币</td>
+      <td>0.8617</td>
+      <td>0.8617</td>
+      <td>0.866</td>
+      <td>0.866</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/hkd.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/hkd/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-hkd.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=HKD" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;澳门元</td>
+      <td>0.8358</td>
+      <td>0.8358</td>
+      <td>0.8413</td>
+      <td>0.8413</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/mop.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/mop/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-mop.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=MOP" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;美元</td>
+      <td>6.7564</td>
+      <td>6.7564</td>
+      <td>6.7917</td>
+      <td>6.7917</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/usd.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/usd/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-usd.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=USD" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;欧元</td>
+      <td>7.6747</td>
+      <td>7.6747</td>
+      <td>7.7457</td>
+      <td>7.7457</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/eur.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/eur/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-eur.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=EUR" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;新加坡元</td>
+      <td>5.2179</td>
+      <td>5.2179</td>
+      <td>5.2661</td>
+      <td>5.2661</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/sgd.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/sgd/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-sgd.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=SGD" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;日元</td>
+      <td>0.041162</td>
+      <td>0.041162</td>
+      <td>0.041543</td>
+      <td>0.041543</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/jpy.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/jpy/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-jpy.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=JPY" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;泰国铢</td>
+      <td>0.1994</td>
+      <td>0.1994</td>
+      <td>0.2012</td>
+      <td>0.2012</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/thb.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/thb/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-thb.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=THB" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;韩国元</td>
+      <td>0.004582</td>
+      <td>0.004582</td>
+      <td>0.004673</td>
+      <td>0.004673</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/krw.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/krw/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-krw.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=KRW" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;英镑</td>
+      <td>8.9792</td>
+      <td>8.9792</td>
+      <td>9.0622</td>
+      <td>9.0622</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/gbp.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/gbp/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-gbp.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=GBP" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;加拿大元</td>
+      <td>4.7899</td>
+      <td>4.7899</td>
+      <td>4.8342</td>
+      <td>4.8342</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/cad.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/cad/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-cad.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=CAD" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;澳大利亚元</td>
+      <td>4.7049</td>
+      <td>4.7049</td>
+      <td>4.7484</td>
+      <td>4.7484</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/aud.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/aud/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-aud.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=AUD" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;瑞士法郎</td>
+      <td>8.2545</td>
+      <td>8.2545</td>
+      <td>8.3308</td>
+      <td>8.3308</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/chf.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/chf/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-chf.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=CHF" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;瑞典克朗</td>
+      <td>0.6914</td>
+      <td>0.6914</td>
+      <td>0.6978</td>
+      <td>0.6978</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/sek.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/sek/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-sek.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=SEK" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;丹麦克朗</td>
+      <td>1.0266</td>
+      <td>1.0266</td>
+      <td>1.0361</td>
+      <td>1.0361</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/dkk.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/dkk/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-dkk.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=DKK" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;挪威克朗</td>
+      <td>0.7014</td>
+      <td>0.7014</td>
+      <td>0.7079</td>
+      <td>0.7079</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/nok.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/nok/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-nok.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=NOK" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;新西兰元</td>
+      <td>3.8965</td>
+      <td>3.8965</td>
+      <td>3.9325</td>
+      <td>3.9325</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/nzd.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/nzd/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-nzd.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=NZD" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;卢布</td>
+      <td>0.0802</td>
+      <td>0.0802</td>
+      <td>0.0869</td>
+      <td>0.0869</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/rub.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/rub/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-rub.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=RUB" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;马来西亚元</td>
+      <td>1.6464</td>
+      <td>1.6464</td>
+      <td>1.6616</td>
+      <td>1.6616</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/myr.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/myr/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-myr.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=MYR" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;南非兰特</td>
+      <td>0.4003</td>
+      <td>0.4003</td>
+      <td>0.4057</td>
+      <td>0.4057</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/zar.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/zar/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-zar.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=ZAR" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;巴基斯坦卢比</td>
+      <td>0.024263</td>
+      <td>0.024263</td>
+      <td>0.024487</td>
+      <td>0.024487</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/pkr.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/pkr/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-pkr.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=PKR" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+    <tr>
+      <td align="left" style="font-weight: bold">&nbsp;哈萨克斯坦坚戈</td>
+      <td>0.013867</td>
+      <td>0.013867</td>
+      <td>0.014996</td>
+      <td>0.014996</td>
+      <td>07-24 10:30</td>
+      <td style="text-align: center">
+        <a href="/huilv/bank/perccy/kzt.html" target="_self">当天</a
+        >&nbsp;&nbsp;<a
+          href="/huilv/listpricehist/kzt/chao_sell.html"
+          target="_self"
+          >历史</a
+        >
+      </td>
+      <td style="text-align: center">
+        <a href="/huilv/d-icbc-kzt.html" target="_self"
+          >走势&nbsp;<i class="fa fa-bar-chart"
+        /></a>
+      </td>
+      <td style="text-align: center">
+        <a href="/bank/xrate/reminder.html?bank=ICBC&ccy=KZT" target="_self"
+          >提醒&nbsp;<i class="fa fa-bell"
+        /></a>
+      </td>
+    </tr>
+  </tbody>
+</table>
