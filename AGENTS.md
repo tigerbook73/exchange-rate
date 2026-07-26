@@ -81,22 +81,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 ## 目录结构约定
 
-```
-src/
-  app/                    // Next.js App Router：页面 + Route Handler
-    api/today/route.ts    // Phase 2
-    api/history/route.ts  // Phase 2
-    page.tsx, layout.tsx
-    *.test.tsx            // 页面级测试与被测文件同目录
-  components/
-    ui/                   // shadcn/ui 生成的组件，用 `npx shadcn add` 管理，不手改内部实现
-    *.tsx                 // 手写的业务/布局组件（theme-provider、theme-toggle、后续的 rate-card、chart 等）
-  lib/
-    utils.ts              // shadcn 生成的 cn() 等工具
-    *.ts                  // 业务逻辑模块（时区/跨年处理、周末补值与空档判定、cheerio 解析、idb 封装等，Phase 2/3）
-    *.test.ts             // 与被测模块同目录
-    __fixtures__/         // cheerio 解析用的本地 HTML fixture（Phase 2 起）
-```
+实际目录结构以 `src/` 下的真实文件为准（用 `find src` / `ls` 查看），以下是不直接从文件列表里看出来的约定：
 
 - 测试文件与被测源文件同目录（`*.test.ts` / `*.test.tsx`），不单独建 `__tests__` 顶层目录。
 - `src/components/ui/` 只放 shadcn 生成的组件，业务组件放在 `src/components/` 下、不进 `ui/` 子目录，保持"生成的" vs "手写的"边界清晰。
@@ -104,36 +89,7 @@ src/
 
 ## 迭代工作流（分阶段执行）
 
-本项目按「阶段」（phase）迭代推进，每个阶段是一个可独立验收的最小交付单元（大致对应 `docs/blueprint.md` 第 13 节的顺序，但可按实际情况拆分/合并，例如"脚手架初始化"、"`/api/today` + `/api/history` 实现"、"IndexedDB 封装"、"首页 UI"、"PWA + 主题接入"）。阶段计划、进度索引统一放在 `docs/plans/`：
-
-```
-docs/plans/
-  README.md              // 阶段索引：一行一条，阶段名 + 状态 + 完成日期 + 一句话结论
-  phase-01-scaffold.md    // 当前/历史阶段的详细计划文档（完成并归档后可删除正文，只留索引里的摘要）
-  ...
-```
-
-### 阶段生命周期
-
-1. **阶段开始 — 制定计划**
-   - 新建 `docs/plans/phase-N-<slug>.md`，至少包含：目标与范围（features）、明确排除的 non-goals、测试计划、验收标准（checklist）、任务拆分。用 TaskCreate 把任务拆分同步建出来。
-   - 计划内容需先对照 `docs/blueprint.md` 和本文件的「架构红线」「领域规则」自查，确认不冲突；如需突破红线，暂停并向用户确认，不自行决定。
-   - **同时复核后续阶段路线图是否依然合理**：结合本阶段和已完成阶段中获得的新信息（踩过的坑、发现的额外工作量、需求变化），检查 `docs/plans/README.md` 里排在后面的阶段划分、顺序、范围是否还站得住；不合理就当场重新组织（拆分/合并/调整顺序/增删阶段），并更新索引，不要机械地按最初设想的阶段清单往下走。
-   - 计划本身不需要逐条等用户确认才能开始执行（除非涉及红线变更或有明显不确定性需要用户拍板）。
-2. **自主执行**
-   - 在已定计划范围内，可以连续自主执行多步（写代码、跑测试、调整实现），不必每一步都停下来确认；用 TaskUpdate 维护任务状态。
-   - 涉及破坏性操作、超出本阶段计划范围的架构决策、引入新的外部依赖服务（数据库、第三方 API key 等）时，仍按全局安全约定暂停，向用户确认。
-3. **阶段验收（结束前必须过）**
-   - `pnpm lint` / `pnpm typecheck` / `pnpm build` 全部通过。
-   - `pnpm test`（vitest）全部通过；本阶段新增的业务逻辑，尤其是「领域规则」里列出的时区/跨年/周末空档等逻辑，必须有对应单测覆盖，不能只靠人工检查。
-   - 涉及 UI/交互变化的阶段：`pnpm test:e2e`（Playwright）全部通过，本阶段新增/改动的关键用户路径要有对应 e2e case（见「测试规范」）；此外仍建议本地起 `next dev` 用浏览器走一遍改动（含亮/暗主题），把 e2e 断言覆盖不到的纯视觉效果（间距、动效是否顺眼等）过一遍。
-   - 逐条对照阶段计划文档里的验收标准打勾，未达成的不算阶段完成，回到"自主执行"继续处理。
-4. **阶段收尾 — 文档清理与归档**
-   - 把阶段计划文档中仍有长期参考价值的内容迁移进对应的长期文档：
-     - 架构/设计层面的结论（最终数据结构、API 约定、目录结构等）→ 更新 `docs/blueprint.md` 对应章节；如果实现细节已经和原始设计明显分叉、需要单独记录 as-built 架构，再新建 `docs/architecture.md`。
-     - 新发现的约束、踩坑经验、领域规则 → 更新本文件（AGENTS.md）对应章节。
-   - 迁移完成后，阶段计划文档正文若已无后续指导意义，直接删除，只在 `docs/plans/README.md` 留一行历史记录；不保留完整过程文档。
-   - 用 git commit 记录（见下方「Git 规范」）。
+本项目按「阶段」（phase）迭代推进；如何开始/收尾一个阶段（计划文档、验收标准、归档流程）见 `phase-workflow` 技能（`.claude/skills/phase-workflow/SKILL.md`），日常改 bug/小改动不需要走这套流程。
 
 ### 测试规范
 
