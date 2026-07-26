@@ -11,7 +11,7 @@ import {
   type Plugin,
 } from "chart.js";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Line } from "react-chartjs-2";
 import type { ChartPoint } from "@/lib/rate-view";
 
@@ -70,9 +70,27 @@ const PALETTE = {
 export function RateChart({ points }: { points: ChartPoint[] }) {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
+  const chartRef = useRef<ChartJS<"line"> | null>(null);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-mount flag, cannot be derived from props/state
     setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    // On mobile, waking a backgrounded PWA sometimes leaves Chart.js's
+    // ResizeObserver-driven canvas buffer stuck at a stale (much smaller)
+    // size from before suspension, rendering the chart tiny in the
+    // top-left corner. Forcing a resize once the page is visible again
+    // fixes it without waiting for another layout-triggering resize event.
+    function handleVisibilityChange() {
+      if (document.visibilityState !== "visible") return;
+      chartRef.current?.resize();
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   const colors =
@@ -137,7 +155,7 @@ export function RateChart({ points }: { points: ChartPoint[] }) {
 
   return (
     <div className="relative min-h-0 flex-1">
-      <Line data={data} options={options} />
+      <Line ref={chartRef} data={data} options={options} />
     </div>
   );
 }
