@@ -10,7 +10,7 @@ import { fetchSourceHtml, TODAY_SOURCE_URL } from "@/lib/sources";
 // respected under self-hosting / other platforms, so we keep both). Next.js
 // statically analyzes this export, so it must stay a literal — keep it equal
 // to TODAY_REVALIDATE_SECONDS (used below for the header) by hand.
-export const revalidate = 300;
+export const revalidate = 60;
 
 export async function GET() {
   try {

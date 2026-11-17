@@ -92,9 +92,9 @@
 ### 抓取与缓存约定
 
 - `src/lib/sources.ts` 统一源地址、User-Agent、8 秒抓取超时与非成功响应处理；API 失败返回 502。
-- `src/lib/api-cache.ts` 定义 today 300 秒、history 3600 秒的目标缓存窗口及 365 天默认回溯深度。
+- `src/lib/api-cache.ts` 定义 today 60 秒、history 3600 秒的目标缓存窗口及 365 天默认回溯深度。
 - Route Handler 的 `revalidate` 必须是可静态分析的数字字面量，与响应 `Cache-Control: s-maxage=..., stale-while-revalidate` 的窗口手动保持一致。
-- **缓存配置不等于线上缓存已生效**：当前构建中 today 为静态 ISR 路由（5 分钟），history 因读取 `nextUrl.searchParams` 仍为动态路由。不能声称 history 仅凭 `revalidate = 3600` 就获得了 Vercel ISR 缓存；变更后应分别验证平台缓存响应头和实际行为。
+- **缓存配置不等于线上缓存已生效**：当前构建中 today 为静态 ISR 路由（1 分钟），history 因读取 `nextUrl.searchParams` 仍为动态路由。不能声称 history 仅凭 `revalidate = 3600` 就获得了 Vercel ISR 缓存；变更后应分别验证平台缓存响应头和实际行为。
 - Cloudflare 的 OpenNext 使用 R2 增量缓存；Vercel 使用其平台缓存，不需要 Cloudflare 绑定或凭据。
 - Serwist 的浏览器 API 缓存策略见第 10 节，与服务端响应缓存分开理解。
 
@@ -102,7 +102,7 @@
 
 同步由 `src/lib/use-rate-data.ts` 驱动，合并与填补见 `src/lib/rates-sync.ts`：
 
-1. 打开 App 时先读取本地数据显示，再后台同步；卡片刷新按钮、浏览器原生下拉刷新/整页重载也触发同步。每次返回前台都尝试同步：监听页面变为可见、窗口重新获得焦点，以及从往返缓存（bfcache）恢复；同一时间只运行一次同步，不设后台轮询。触发请求不代表绕过服务端 300 秒报价缓存。
+1. 打开 App 时先读取本地数据显示，再后台同步；卡片刷新按钮、浏览器原生下拉刷新/整页重载也触发同步。每次返回前台都尝试同步：监听页面变为可见、窗口重新获得焦点，以及从往返缓存（bfcache）恢复；同一时间只运行一次同步，不设后台轮询。触发请求不代表绕过服务端 60 秒报价缓存。
 2. 在本次同步写入 today 前检查本地最早、最新日期，**历史深度检查优先**：
    - 本地为空，或最早日期晚于“北京时间今天 − 365 天”：不传 `datefrom`，完整重新回溯；即使最新日期是今天也不跳过。
    - 深度足够，且最新日期是今天：跳过 history。

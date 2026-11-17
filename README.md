@@ -36,3 +36,18 @@ pnpm build         # next build
 Cloudflare 本地运行时只在 `pnpm dev` 的开发阶段初始化；两边的生产构建都不会启动它。`open-next.config.ts`、`wrangler.jsonc` 和 `public/_headers` 供 Cloudflare 使用，Vercel 无需配置 Cloudflare 登录凭据或绑定。
 
 `pnpm deploy` 不会推送 GitHub，也不会发布到 Vercel。是否在推送 GitHub 后同时触发两边部署，取决于各平台后台的 Git 集成设置。
+
+### Cloudflare 的 GitHub 自动部署
+
+在 Cloudflare 后台进入 **Workers & Pages → icbc-rate → Settings → Builds → Connect**，授权 Cloudflare GitHub App 访问 `tigerbook73/exchange-rate`，并设置：
+
+| 设置     | 值                                       |
+| -------- | ---------------------------------------- |
+| 生产分支 | `main`                                   |
+| 根目录   | `/`（仓库根目录）                        |
+| 构建命令 | `pnpm exec opennextjs-cloudflare build`  |
+| 部署命令 | `pnpm exec opennextjs-cloudflare deploy` |
+
+构建和部署拆开执行，避免部署阶段再次构建；Worker 名称必须与 `wrangler.jsonc` 的 `name`（`icbc-rate`）一致。保存后，推送到 GitHub 的 `main` 分支才会触发自动部署，本地 commit 不会触发。配置是否成功以后台连接状态和首次构建日志为准。
+
+Wrangler 登录成功不代表具备管理自动构建的权限。若通过 API 配置，还需要用户级 API token 的 `Workers Builds Configuration: Edit` 权限，以及 Cloudflare GitHub App 授权和部署用 build token；不要将令牌写入仓库或聊天。详见 [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) 和 [Builds API](https://developers.cloudflare.com/workers/ci-cd/builds/api-reference/)。

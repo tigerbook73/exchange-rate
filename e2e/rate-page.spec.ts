@@ -31,7 +31,7 @@ async function mockApis(page: import("@playwright/test").Page) {
       }),
     }),
   );
-  await page.route("**/api/history", (route) =>
+  await page.route(/\/api\/history(?:\?.*)?$/, (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -129,8 +129,8 @@ test("shows the last known rate (with a loading note) instead of a blank state w
     };
   });
 
-  await page.unroute("**/api/history");
-  await page.route("**/api/history", async (route) => {
+  await page.unroute(/\/api\/history(?:\?.*)?$/);
+  await page.route(/\/api\/history(?:\?.*)?$/, async (route) => {
     await new Promise((resolve) => setTimeout(resolve, 1500));
     return route.fulfill({
       status: 200,
@@ -155,4 +155,114 @@ test("shows the last known rate (with a loading note) instead of a blank state w
   // over, without the card ever having changed structure.
   await expect(page.getByText("4.7500")).toBeVisible();
   await expect(page.getByText("（加载中…）")).not.toBeVisible();
+});
+
+for (const colorScheme of ["light", "dark"] as const) {
+  for (const wakeEvent of ["visibilitychange", "pageshow", "focus"] as const) {
+    test(`refreshes immediately on ${wakeEvent} in ${colorScheme} mode`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme });
+      await page.setViewportSize({ width: 390, height: 844 });
+      let requests = 0;
+      await page.route("**/api/today", (route) => {
+        requests += 1;
+        return route.fulfill({
+          json: {
+            bank: "icbc",
+            currency: "aud",
+            date: TODAY,
+            publishedAt: `${TODAY}T10:30:00+08:00`,
+            huiSell: requests === 1 ? 4.75 : 4.76,
+          },
+        });
+      });
+
+      await page.goto("/");
+      await expect(page.getByText("4.7500")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "刷新汇率" }),
+      ).toBeEnabled();
+      expect(requests).toBe(1);
+
+      // No five-minute wait: simulate a mobile resume immediately after sync.
+      await page.evaluate((eventName) => {
+        if (eventName === "visibilitychange") {
+          Object.defineProperty(document, "visibilityState", {
+            configurable: true,
+            value: "hidden",
+          });
+          document.dispatchEvent(new Event("visibilitychange"));
+          Object.defineProperty(document, "visibilityState", {
+            configurable: true,
+            value: "visible",
+          });
+          document.dispatchEvent(new Event("visibilitychange"));
+        } else if (eventName === "pageshow") {
+          window.dispatchEvent(
+            new PageTransitionEvent("pageshow", { persisted: true }),
+          );
+        } else {
+          window.dispatchEvent(new Event("focus"));
+        }
+      }, wakeEvent);
+
+      await expect(page.getByText("4.7600")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "刷新汇率" }),
+      ).toBeEnabled();
+      expect(requests).toBe(2);
+    });
+  }
+}
+
+test("coalesces wake events while keeping the previous quote visible", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await expect(page.getByText("4.7500")).toBeVisible();
+  await expect(page.getByRole("button", { name: "刷新汇率" })).toBeEnabled();
+
+  let requests = 0;
+  let releaseResponse!: () => void;
+  const responseReady = new Promise<void>((resolve) => {
+    releaseResponse = resolve;
+  });
+  await page.route("**/api/today", async (route) => {
+    requests += 1;
+    await responseReady;
+    return route.fulfill({
+      json: {
+        bank: "icbc",
+        currency: "aud",
+        date: TODAY,
+        publishedAt: `${TODAY}T10:35:00+08:00`,
+        huiSell: 4.77,
+      },
+    });
+  });
+
+  try {
+    await page.evaluate(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+      window.dispatchEvent(
+        new PageTransitionEvent("pageshow", { persisted: true }),
+      );
+    });
+    await expect.poll(() => requests).toBe(1);
+    await expect(page.getByText("（加载中…）")).toBeVisible();
+    await expect(page.getByText("4.7500")).toBeVisible();
+  } finally {
+    releaseResponse();
+  }
+
+  await expect(page.getByText("4.7700")).toBeVisible();
+  await expect(page.getByRole("button", { name: "刷新汇率" })).toBeEnabled();
+  expect(requests).toBe(1);
+
+  // A later wake still refreshes, even though the prior sync just finished.
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect.poll(() => requests).toBe(2);
+  await expect(page.getByRole("button", { name: "刷新汇率" })).toBeEnabled();
 });
