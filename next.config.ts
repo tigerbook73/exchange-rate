@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants";
 import withSerwistInit from "@serwist/next";
 
 const nextConfig: NextConfig = {};
@@ -13,4 +14,14 @@ const withSerwist = withSerwistInit({
   disable: process.env.NODE_ENV !== "production",
 });
 
-export default withSerwist(nextConfig);
+export default function configureNext(phase: string) {
+  // Only local development needs Cloudflare bindings. Production builds on
+  // Vercel and Cloudflare must not start Wrangler's local runtime.
+  if (phase === PHASE_DEVELOPMENT_SERVER) {
+    void import("@opennextjs/cloudflare").then((m) =>
+      m.initOpenNextCloudflareForDev(),
+    );
+  }
+
+  return withSerwist(nextConfig);
+}
