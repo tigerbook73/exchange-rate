@@ -4,7 +4,7 @@
 
 - 技术方案：[`docs/blueprint.md`](./docs/blueprint.md)
 - Agent 协作约束与迭代工作流：[`AGENTS.md`](./AGENTS.md)
-- 阶段进度：[`docs/plans/README.md`](./docs/plans/README.md)
+- 分阶段开发流程：[`docs/phase-workflow.md`](./docs/phase-workflow.md)
 
 ## 开发
 

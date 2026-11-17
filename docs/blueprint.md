@@ -1,88 +1,67 @@
-# 工商银行澳币汇率 PWA — 技术方案与实施计划
+# 工商银行澳币汇率 PWA — 技术方案
 
-## 1. 项目目标
+本文记录当前实现与需长期保留的规则。开发约束见 [AGENTS.md](../AGENTS.md)，命令入口见 [README](../README.md)。
 
-- 只展示中国工商银行「澳大利亚元」的**购汇价**（即银行"现汇卖出价"——用人民币购买外汇，以外汇账户/电汇形式获得，非现钞）。
-- 展示当日购汇价 + 历史趋势图，不需要买入价、现钞价等其他价位。
-- 历史数据缓存在用户手机本地。
-- 数据源：`kylc.com`（快易理财网），无官方 API，需抓取解析 HTML。
-- 手机优先（Mobile First）的 PWA，可安装、可离线查看已缓存数据。
-- 部署在 Vercel（Hobby 免费版），**不使用 Cron**，Vercel 仅作为跨域抓取代理，不做任何服务端持久化存储。
-- 历史缺口由客户端在每次打开 App 时自动补齐；数据源支持 `datefrom` 参数（详见 3.2 节），首次访问一次性回溯 1 年，之后每次只补本地已有数据之后的增量。
+## 1. 项目目标与架构边界
 
-## 2. 术语对应关系（重要）
+- 展示工商银行澳大利亚元的现汇卖出价（个人购汇价）及每日历史趋势；内部字段统一为 `huiSell`。
+- 移动端优先的 PWA，历史数据只存用户设备 IndexedDB；不同站点域名的本地数据相互独立，不自动迁移或共享。
+- 同一份 Next.js 源码支持 Vercel 和 Cloudflare Workers，服务端负责抓取、解析与转发。
+- 不引入业务数据库、服务端历史归档、Cron、后台定时采集或应用层服务端限流。Cloudflare 的 R2 只用于 OpenNext 增量缓存，不存用户历史。
+- 不抓取买入价、现钞价等其他价位；如要扩展范围或全天自动采集，需另行确认架构变更。
 
-银行报价的"买入/卖出"是站在银行角度：
+## 2. 术语
 
-| 银行术语       | 含义                   | 对应个人操作                       |
-| -------------- | ---------------------- | ---------------------------------- |
-| 现汇买入价     | 银行向客户买入现汇     | 结汇（把手里的外汇换成人民币）     |
-| 现钞买入价     | 银行向客户买入现钞     | 结钞                               |
-| **现汇卖出价** | **银行向客户卖出现汇** | **购汇（用人民币买外汇，非现钞）** |
-| 现钞卖出价     | 银行向客户卖出现钞     | 购钞                               |
+银行“现汇卖出价”表示银行向个人卖出外汇，对应个人“购汇”。本项目只使用这一价位，不混用现汇买入、现钞买入或现钞卖出价格。
 
-本项目只需要「现汇卖出价」这一列，字段内部命名为 `huiSell`。
+## 3. 数据源与日期
 
-## 3. 数据源调研结论（已验证）
+### 3.1 当日报价
 
-### 3.1 当日购汇价
+- 源地址：`https://www.kylc.com/bank/rmbfx/b-icbc.html`。
+- 服务端 HTML 表格，无浏览器 CORS 支持，通过同源 API 代理读取。
+- `table#bank_rate_table` 中第一列 trim 后为“澳大利亚元”的行：第 4 列（下标 3）为 `huiSell`，第 6 列（下标 5）为发布时间。
+- 发布时间 `MM-DD HH:mm` 一律按北京时间解释。当前北京时间月份为 1、源月份为 12 时取上一年；当前为 12、源月份为 1 时取下一年；其余取当前年。
+- 解析与日期逻辑见 `src/lib/parse-today.ts`、`src/lib/date.ts`，源页面样本保存在 `src/lib/__fixtures__/`。
 
-- URL: `https://www.kylc.com/bank/rmbfx/b-icbc.html`
-- 服务端渲染的静态表格，`robots.txt` 允许抓取（`Allow: /`）。
-- 定位「澳大利亚元」所在行，只取「现汇卖出」列（对应表头 `hui_sell`）和「发布时间」列（格式如 `07-24 09:11`，无年份、无时区）。
-- 无 CORS 响应头，浏览器端**无法**直接 fetch，必须经服务端代理。
-- **时区与年份拼接假设（需在 `/api/today` 实现中显式处理）**：
-  - 发布时间字符串按**北京时间（Asia/Shanghai, UTC+8）**解释，不依赖服务器本地时区。
-  - 年份不能直接套用"当前年份"，需处理跨年边界：若解析出的月份为 12 且当前月份为 1，年份取"当前年份 - 1"；若解析出的月份为 1 且当前月份为 12，年份取"当前年份 + 1"；其余情况直接用当前年份。
+### 3.2 历史报价
 
-### 3.2 购汇价历史趋势
+- 源地址：`https://www.kylc.com/huilv/d-icbc-aud.html`，默认页面就是现汇卖出价历史。
+- `datefrom=YYYY-MM-DD` 可指定起点，省略 `dateto` 获取至最新日期。项目默认请求往前 365 天；不带参数的源页面约有 28 天数据，不能据此认定源站仅支持 28 天。
+- 第二个 `table.bank_huilv_table` 为逐日数据：第 1 列完整 ISO 日期，第 2 列 `span.td_rate` 为 `huiSell`。解析见 `src/lib/parse-history.ts`。
+- 2026-06-23 至 2026-07-24 的调研样本中周六也有报价。此样本不作为固定休市日历，始终以实际返回日期集合判断空档。
 
-- URL：`https://www.kylc.com/huilv/d-icbc-aud.html`（不带任何后缀的默认页面，已验证标题即为「现汇卖出价历史与走势图」，正好是购汇价，不需要访问 `hui_buy.html` / `chao_buy.html` / `chao_sell.html` 这三个子页面）。
-- 默认（不带参数）返回**最近约 28 天**的逐日数据表格（日期 + 现汇卖出价 + 涨跌%）。
-- **已实测（更正此前结论）：`datefrom=YYYY-MM-DD` 参数有效**，`dateto` 省略时默认取最新日期，**支持任意长度区间**（已验证过一次请求拿到 365 天/365 行完整数据，无截断）。此前"`startdate`/`enddate` 等参数无效"的结论是猜错了参数名，不是源站真的不支持区间查询。
-- `/api/history` 因此接受可选的 `datefrom` query 参数并透传给上游：客户端根据本地 IndexedDB 已有数据的最新日期算出增量起点（`最新日期 + 1 天`）；本地为空（首次访问）时不传参，服务端 fallback 到"最新日期往前 365 天"。这样服务端始终保持无状态转发（不新增任何持久化），但请求体积和对 kylc.com 的访问量会随本地存量增长而自然下降。
-- **已用真实数据核实发布节奏**：抽查 2026-06-23 ~ 2026-07-24 共 28 条记录，每个周六都有报价，只有周日缺失——不是常见假设里的"仅工作日发布"。客户端的空档判断不应硬编码"周末不发布"，而要以 `/api/history` 实际返回的日期集合为准（详见第 7 节）。
+## 4. 数据流
 
-## 4. 总体架构
-
-```
-[手机浏览器 / PWA]
-   ├─ UI：今日购汇价卡片 + 趋势折线图
-   ├─ 本地存储：IndexedDB（购汇价历史序列）
-   └─ fetch → Vercel Serverless Function（纯代理，无状态）
-                 ├─ /api/today   → 抓取 b-icbc.html，解析澳元行的现汇卖出价，返回 JSON
-                 └─ /api/history → 抓取 d-icbc-aud.html（可带 datefrom 参数），解析现汇卖出价表格，返回 JSON
-                       （Vercel 端不存储，每次请求都是实时抓取转发）
+```text
+浏览器 / PWA
+  ├─ 卡片、趋势图、安装入口
+  ├─ IndexedDB：fx-cache / rates（业务历史的唯一存储）
+  └─ 同源 API：Vercel Route Handler / Cloudflare Worker
+       ├─ /api/today   → 抓取当日页面 → 解析 → JSON
+       └─ /api/history → 抓取历史页面 → 解析 → JSON
 ```
 
-- Vercel 端**只做**：请求转发 + HTML 解析 + JSON 输出。没有数据库、没有 Cron、没有持久化。
-- 只需要 2 个源页面（而不是原方案的 5 个），抓取和解析逻辑更简单。
-- 所有历史数据的"保存"发生在手机本地（IndexedDB）。
+服务端响应可被平台缓存；业务合并、补缺与趋势计算在客户端完成。缓存不替代 IndexedDB，也不保证 App 关闭期间的数据采集。
 
 ## 5. 技术栈
 
-| 层        | 选型                             | 理由                                                                                             |
-| --------- | -------------------------------- | ------------------------------------------------------------------------------------------------ |
-| 框架      | Next.js（App Router）            | API Route 天然是 Vercel Serverless Function，前后端一个项目，零额外配置                          |
-| HTML 解析 | cheerio                          | 轻量、服务端可用，语法类似 jQuery，适合抓表格                                                    |
-| 前端 UI   | React + Tailwind CSS + shadcn/ui | 移动端样式效率高；shadcn/ui 按需引入组件，自带主题（CSS 变量）机制                               |
-| 图表      | Chart.js + react-chartjs-2       | Chart.js 为核心渲染库，react-chartjs-2 是其 React 组件封装，两者配合使用；轻量、移动端触屏体验好 |
-| 本地存储  | IndexedDB（通过 idb 库封装）     | 容量远大于 localStorage，适合存时间序列                                                          |
-| PWA       | @serwist/next（基于 Workbox）    | 自动生成 service worker + manifest，对 App Router 兼容性更好                                     |
-| 部署      | Vercel Hobby（免费版）           | 与 Next.js 无缝集成，无需 Cron                                                                   |
+| 用途         | 当前选型                                          |
+| ------------ | ------------------------------------------------- |
+| 框架与包管理 | Next.js 16 App Router、TypeScript、pnpm           |
+| UI 与主题    | Tailwind CSS、shadcn/ui（Base UI）、next-themes   |
+| HTML 解析    | cheerio，仅服务端                                 |
+| 图表         | Chart.js + react-chartjs-2                        |
+| 本地存储     | IndexedDB，通过 idb                               |
+| PWA          | @serwist/next、serwist                            |
+| 测试         | Vitest；Playwright（Chromium）                    |
+| 部署         | Vercel；Cloudflare Workers（OpenNext + Wrangler） |
 
-## 6. 后端 API 设计（纯代理，无存储）
+## 6. API 与缓存
 
 ### `GET /api/today`
 
-抓取 `b-icbc.html`，用 cheerio 定位「澳大利亚元」所在的 `<tr>`，只提取现汇卖出价和发布时间。
-
-**已用真实响应核实的选择器**（源站结构变化时更新这里）：
-
-- 表格：`table#bank_rate_table`（`data-role="table1"`），`tbody > tr`，找 `td:nth-child(1)` 文本 trim 后等于「澳大利亚元」的那一行（原始文本前面有 `&nbsp;`，需要 trim）。
-- 列顺序（0-indexed）：`td[0]`=币种、`td[1]`=现汇买入、`td[2]`=现钞买入、`td[3]`=**现汇卖出（huiSell）**、`td[4]`=现钞卖出、`td[5]`=发布时间（格式 `MM-DD HH:mm`，如 `07-24 10:30`，无年份无时区，按第 3.1 节的规则处理）。
-
-响应示例：
+返回示例：
 
 ```json
 {
@@ -94,13 +73,9 @@
 }
 ```
 
-### `GET /api/history`
+### `GET /api/history?datefrom=YYYY-MM-DD`
 
-抓取 `d-icbc-aud.html`，解析表格为逐日序列。接受可选的 `datefrom=YYYY-MM-DD` query 参数（格式非法或缺失时 fallback 到"最新日期往前 365 天"），透传给上游 URL（`?datefrom=...`，不加 `dateto`，让源站默认取最新日期）。
-
-**已用真实响应核实的选择器**：页面里有两个 `table.bank_huilv_table`，第一个是"涨跌/最高/最低/平均"汇总表（不需要），真正的逐日数据表是**第二个**（`class` 里多一个 `text-nowrap`），结构：`thead > tr > th` 依次是「日期」「现汇卖出价」「涨跌%(与前日比)」「涨跌%(与首日比)」；数据行 `td:nth-child(1)` 是**完整 ISO 日期**（`YYYY-MM-DD`，自带年份，不需要像 `/api/today` 那样处理年份/时区），`td:nth-child(2)` 里的 `span.td_rate` 是现汇卖出价数值。
-
-响应示例：
+可选 `datefrom` 透传到源站。缺失或不匹配 `YYYY-MM-DD` 格式时，从当前北京时间日期向前 365 天开始请求。
 
 ```json
 {
@@ -114,91 +89,79 @@
 }
 ```
 
-实现要点：
+### 抓取与缓存约定
 
-- 设置合理的 `User-Agent`，避免被识别为异常爬虫。
-- 加超时和异常处理。
-- 响应头加 `Cache-Control: s-maxage=<窗口秒数>, stale-while-revalidate`，**并且**加 `export const revalidate = <同一个数字>` 路由级配置——两者都要，缺一不可。已用真实 Vercel 部署验证过：只加响应头，线上会被 Vercel 覆盖成 `Cache-Control: public, max-age=0, must-revalidate`（`x-vercel-cache: MISS`）完全不缓存，因为 Vercel 的边缘缓存是照 Next 的路由分类（`ƒ` 动态 / `○` 静态）走的，不是照手动设置的响应头走的；加上 `export const revalidate` 后路由会变成 `○ (Static)` 带对应的 `Revalidate` 标注，边缘缓存才真正生效。响应头本身在自托管等非 Vercel 场景下仍然有意义，保留不动。利用边缘缓存减少对源站的重复请求（**不做**应用层的内存级请求频率限制——Serverless Function 实例无状态、水平扩展，内存计数器无法跨实例共享，起不到可靠限流效果；对源站的保护完全依赖边缘缓存自然摊薄重复请求）。
-- **两个接口的窗口分开设置**（`src/lib/api-cache.ts`）：`/api/today` 保持 `TODAY_REVALIDATE_SECONDS = 300`（今日汇率是用户最敏感的数据，需要较短窗口）；`/api/history` 用 `HISTORY_REVALIDATE_SECONDS = 3600`（历史数据里除"今天"外的每一行一旦发布就不会再变，可以缓存更久，进一步减少对 kylc.com 的访问）。合并到 IndexedDB 时**只信任 `/api/today` 的"今天"数据**——`/api/history` 响应里若混入当天那一条（因为缓存了一小时，值可能是陈旧的），会被显式过滤掉，不参与合并；`/api/today` 请求失败时，"今天"这条记录维持缺失（走后续的"空档"处理），不会退回去用 `/api/history` 里可能过期的缓存值。
+- `src/lib/sources.ts` 统一源地址、User-Agent、8 秒抓取超时与非成功响应处理；API 失败返回 502。
+- `src/lib/api-cache.ts` 定义 today 300 秒、history 3600 秒的目标缓存窗口及 365 天默认回溯深度。
+- Route Handler 的 `revalidate` 必须是可静态分析的数字字面量，与响应 `Cache-Control: s-maxage=..., stale-while-revalidate` 的窗口手动保持一致。
+- **缓存配置不等于线上缓存已生效**：当前构建中 today 为静态 ISR 路由（5 分钟），history 因读取 `nextUrl.searchParams` 仍为动态路由。不能声称 history 仅凭 `revalidate = 3600` 就获得了 Vercel ISR 缓存；变更后应分别验证平台缓存响应头和实际行为。
+- Cloudflare 的 OpenNext 使用 R2 增量缓存；Vercel 使用其平台缓存，不需要 Cloudflare 绑定或凭据。
+- Serwist 的浏览器 API 缓存策略见第 10 节，与服务端响应缓存分开理解。
 
-## 7. 前端本地缓存与"自动补缺"逻辑
+## 7. 客户端同步与空档
 
-1. App 启动（或点击刷新按钮/原生下拉刷新触发的整页重载）时：
-   - 调用 `/api/today`，得到当天最新购汇价。
-   - 调用 `/api/history`（有条件地跳过）：先读本地 IndexedDB 里已有数据的最新、最早日期。
-     - 本地最新日期就是"今天" → **跳过这次 `/api/history` 请求**：今天这一条数据从来只信任 `/api/today`（见下），history 在这个时间点上不会再提供任何新信息，请求也是白打。
-     - 否则（本地最新日期早于今天，或本地为空）→ 带上 `datefrom=<本地最新日期>`（**不是 +1**）重新请求，让本次响应把最新那一天也再问一遍：那一天的本地记录很可能只是当天中途从 `/api/today` 抓到的快照（发布之后源站是否还会再更新，无法从客户端确认），必须靠 `/api/history` 的结果去覆盖/确认，不能仅凭"本地已经有一条记录"就当作已经是最终值。本地为空（首次访问）时不传参，服务端 fallback 到"往前回溯 1 年"，一次性拿到完整历史。
-2. 与 IndexedDB 中已有的 `rates` 表按 `date` 做 upsert（新数据覆盖旧数据，因为源站数据可能会有微调；`/api/history` 里"今天"那条会被过滤掉，只信任 `/api/today` 的结果）。
-3. 界面上默认展示"今日购汇价"用 `/api/today` 的结果（最新，含具体发布时间）；趋势图数据来自本地 IndexedDB 里的全部历史记录（设备上累计的所有天数，首次访问后通常已有完整 1 年）。
-4. 检测本地历史是否有日期空档，分两种情况区别处理：
-   - **不假设固定的休市规律，以源站实际返回的日期集合为准**：已用真实数据核对，工行发布节奏是"周六有报价、只有周日没有"，并非"仅工作日"这种直觉假设。判空档时对比「本地 IndexedDB 已有日期」与「`/api/history` 这次实际返回的日期集合」（这个集合的跨度会随本地存量增长而缩小，只覆盖真正缺失的部分）。
-   - **本次 `/api/history` 请求区间内的空档（比如周日）→ 用最近一天的真实数据填补，并在展示时标注**：取本地已有的、日期上最近的前一个真实数据（沿用其 `huiSell`），写回 IndexedDB 时标记为填补记录（`source: "carried-forward"`，并记录 `carriedFromDate` 指向真实数据的日期），不能让用户误以为是当天的真实报价。趋势图上这类点用空心圆点（区别于实心点）+ 点击/悬停 tooltip 里的说明文字（"该日期未更新，沿用前一日数据"）呈现——**不要**在图表下方常驻一行说明文字：这类文字是否出现取决于当前数据里是否存在填补点，属于条件渲染，会在真实数据到达的那一刻让图表容器的 flex 兄弟节点突然多出/减少一块空间，进而触发 Chart.js 的 `ResizeObserver` 重新计算画布尺寸，容易引出布局抖动/意外撑高的问题（真实踩过）。**只在本次请求实际返回的区间内填补**，不臆造超出该区间的数据（自愈性：某次同步失败或很久没打开 App 也不会漏抓——下次同步仍然会从"本地最新日期"重新请求，缺口会在下次同步时被完整补上）。
-   - **本地历史深度不足 1 年时，自动整体重新回溯**：只看"本地最新日期"来算增量 `datefrom` 是不够的——如果设备之前只攒过一段较浅的历史（比如运行过旧版本、本地只有约 28 天数据），单纯的增量请求永远补不到更早的部分，会一直"卡"在那个深度上。所以每次同步时会同时检查本地最早日期，只要它比"1 年前"更近，就改成不带 `datefrom` 的完整请求重新回溯 1 年（幂等 upsert，覆盖写入不会破坏已有数据）；一旦本地最早日期到达 1 年前的边界，之后就恢复成正常的增量请求。用户不需要手动清空 IndexedDB，这个检测和回补是自动触发的。
-   - **首次访问 1 年回溯窗口之外、彻底追不到真实数据的空档**（设备从未见过、且早于源站首次抓取时的回溯边界）→ 维持原方案的"数据缺失"处理：标记为"数据缺失（源站未提供更早查询）"，图表上以断线或灰色提示呈现，不做插值伪造数据，也不做填补。
-   - **标记清除**：只要之后某次 `/api/history` 或 `/api/today` 同步真的带回了该日期的数据，upsert 时用真实记录（`source: "today" | "history"`）覆盖掉之前的填补记录，标记自动消失，无需额外清理逻辑。
-5. 离线状态：service worker 缓存最近一次成功的 API 响应（stale-while-revalidate），无网络时直接读 IndexedDB 展示已缓存内容，并给出"离线，数据为 XX 时刻缓存"提示。
+同步由 `src/lib/use-rate-data.ts` 驱动，合并与填补见 `src/lib/rates-sync.ts`：
 
-## 8. IndexedDB 数据结构
+1. 打开 App 时先读取本地数据显示，再后台同步；卡片刷新按钮、浏览器原生下拉刷新/整页重载也触发同步。每次返回前台都尝试同步：监听页面变为可见、窗口重新获得焦点，以及从往返缓存（bfcache）恢复；同一时间只运行一次同步，不设后台轮询。触发请求不代表绕过服务端 300 秒报价缓存。
+2. 在本次同步写入 today 前检查本地最早、最新日期，**历史深度检查优先**：
+   - 本地为空，或最早日期晚于“北京时间今天 − 365 天”：不传 `datefrom`，完整重新回溯；即使最新日期是今天也不跳过。
+   - 深度足够，且最新日期是今天：跳过 history。
+   - 其他情况：`datefrom=<本地最新日期>`，不能加一天。最新记录可能只是前一天的中途快照，需用历史数据再次确认并覆盖。
+3. 两个 API 的真实记录按 `date` upsert。history 中当天的记录不参与合并，只信 today；today 失败时保留已有本地报价，不退回使用 history 的当天长缓存值。
+4. 在本次 history **实际返回的最早至最晚日期**范围内枚举日期，缺失日期沿用最近的前一个真实记录，标为 `carried-forward`，`carriedFromDate` 指向真实日期。不得用填补记录继续填补，也不得补区间外的日期。
+5. 后续真实报价 upsert 自动覆盖填补记录及标记，无需单独清理。
+6. 本地无记录且无法按上述规则填补的日期保留缺失，以图表 `null` 断线呈现，不插值。默认回溯 365 天是本项目策略，不据此断言源站无法查询更早数据。
+7. 离线或同步失败时保留本地数据；当前页面对同步异常显示“同步失败…展示的是本地已缓存数据”。
 
+## 8. IndexedDB
+
+数据库 `fx-cache`（版本 1），对象仓库 `rates`，主键 `date`。类型定义在 `src/lib/rates-db.ts`：
+
+```ts
+interface RateRecord {
+  date: string; // YYYY-MM-DD
+  huiSell: number;
+  publishedAt: string | null; // today 来源才有发布时间
+  source: "today" | "history" | "carried-forward";
+  carriedFromDate: string | null; // 填补来源的真实日期
+}
 ```
-数据库：fx-cache
-对象仓库：rates (keyPath: date)
-字段：
-  date: string             // "2026-07-24"
-  huiSell: number           // 购汇价；若 source 为 carried-forward，值等于 carriedFromDate 当天的 huiSell
-  publishedAt: string       // 仅当日（source==="today"）记录有，其余可为空
-  source: "today" | "history" | "carried-forward"
-  carriedFromDate: string | null  // 仅 source==="carried-forward" 时有值：真实数据来自哪一天，用于 UI 文案"数据来自 MM-DD"
-```
 
-## 9. 前端页面设计（移动优先，单一价位、无需切换）
+同一日期 upsert 覆盖旧记录；不存日内每次报价快照。
 
-- **首页（单页）**
-  - 顶部：购汇价卡片，大字号显示当前价格，下方小字展示更新时间。**卡片结构必须保持稳定**：同步中不切换成"加载中"占位块替换掉数字，而是继续显示最近一次的本地值，只在更新时间旁加一个"（加载中…）"的行内小字提示，同步完成后这个提示消失、数字如果有变化就原地更新——避免加载状态在数字和占位文字之间来回切换造成的布局跳动。
-  - 中部：时间范围切换（7天 / 30天 / 60天 / 90天 / 半年 / 一年），折线图展示购汇价走势；超过 30 天的区间不显示数据点圆圈标记（数据点太密会挤成一团），只显示折线本身。
-  - 无需价位类型切换（不再有买入/现钞的 Tab）。
-  - 底部：数据来源与免责声明文字（"数据来自快易理财网，仅供参考，以银行官网实际成交汇率为准"）。
-- 响应式断点以手机为主（375–430px 设计基准），大屏做居中卡片布局即可，不必单独做桌面版。
-- 刷新方式：购汇价卡片右上角有独立的刷新按钮（点击触发 `useRateData` 的 `refresh()`）；**没有**自定义的下拉刷新手势代码——早期实现过一版自定义 pull-to-refresh，因为只判断垂直位移、缺少浏览器原生手势的橡皮筋回弹手感，和原生下拉指示器叠在一起显得突兀，已移除，改为完全依赖浏览器/PWA 自带的原生下拉刷新（触发整页 reload，重新挂载后 `useRateData` 自然会在 mount 时重新同步一次），不需要额外代码。
-- **主题支持**：只跟随系统 `prefers-color-scheme`，**不提供手动切换入口**（人工评审后决定去掉切换按钮，减少界面元素；系统级深色模式已经覆盖绝大多数场景），基于 shadcn/ui 的 CSS 变量主题机制（`next-themes` 的 `defaultTheme="system"` + `enableSystem`）实现；图表配色（折线、网格线、坐标轴文字）需随主题联动，不能硬编码亮色假设。
+## 9. 页面与交互
 
-## 10. PWA 配置要点（已实现，记录实际方案）
+- 首页默认 30 天，支持 7 天、30 天、90 天、半年、一年；卡片显示本地最新报价及其日期/发布时间。
+- 同步时保留卡片两行结构与已有价格，只在时间旁加“（加载中…）”。
+- 填补点在短区间用空心圆、tooltip 提示；超过 30 天只画线。不可恢复空档以断线显示。
+- Chart.js 的辅助说明放 tooltip 或容器内叠加层，不能条件增加占 flex 空间的兄弟节点；返回前台主动 `resize()`。
+- flex 容器同时作为 flex 子元素时加 `min-h-0`，避免撑出页面滚动。
+- 主题只跟随系统，无手动切换入口；图表线条、网格、文字随主题变化。
+- 刷新使用卡片按钮或浏览器原生下拉刷新，不自行实现手势。
 
-- `manifest`：用 Next.js App Router 的 `src/app/manifest.ts` 文件约定生成（自动产出 `/manifest.webmanifest` 并在 `<head>` 里自动加 `<link rel="manifest">`，不需要手写静态 `manifest.json` 或手动加 link 标签）。图标用 Playwright 截图一个简单的 HTML（蓝底白字"汇"）生成 192×192 / 512×512 / 180×180（iOS `apple-touch-icon`）三个 PNG，放在 `public/icons/`。
-- 主题色：`manifest.ts` 里的 `theme_color` 只能给一个静态值（品牌蓝 `#2563eb`）；亮/暗两套 `theme-color` 通过 `src/app/layout.tsx` 的 `viewport.themeColor` 数组（`[{media, color}, ...]`）实现，对应实际的亮/暗背景色。
-- Service Worker：`src/app/sw.ts` 用 `serwist` 包的 `Serwist` 类手写，`runtimeCaching` 直接复用 `@serwist/next/worker` 导出的 `defaultCache`——它已经内置了"静态资源 cache-first / stale-while-revalidate"+"同源 `/api/*` 用 `NetworkFirst`（10 秒超时）"这套策略，和本节最初的设计要求刚好一致，**不需要自己写自定义 runtimeCaching 规则**。
-- **重要坑（已解决）**：`@serwist/next` 底层是 webpack 插件，而 Next 16 的 `next dev`/`next build` 默认用 Turbopack，两者冲突（直接报错拒绝启动/构建）。解决方式：
-  - `next.config.ts` 里 `withSerwistInit({ ..., disable: process.env.NODE_ENV !== "production" })`：这一步**只是**让开发环境跳过 SW 的实际编译逻辑（`defaultCache` 在非生产环境本来就会退化成纯 `NetworkOnly`，跳过没有任何实际损失），**不能单独解决 Turbopack 冲突**——`withSerwistInit` 不管 `disable` 是什么都会往返回的 config 上挂一个 `webpack(...)` 函数，Next 是看这个函数存不存在来判断"是不是有自定义 webpack 配置"，不是看它会不会真的执行到。
-  - 真正解决冲突要靠：`package.json` 的 `dev` 和 `build` 两个脚本都显式加 `--webpack`（`next dev --webpack` / `next build --webpack`），完全不让 Turbopack 参与，两者缺一不可（只加 build 不加 dev，dev 环境下改几次文件触发重新编译后一样会报错）。
-  - 评估过官方新出的 `@serwist/turbopack`（用 esbuild 代替 webpack、把 SW 改成 Route Handler 动态提供，原生兼容 Turbopack）作为替代方案，但它的集成方式和现在的 `@serwist/next` 完全不同（要重写 `next.config.ts`、新增一个 route 文件），而且官方文档里自己标注为"实验性支持"；权衡稳定性后维持 `--webpack` 方案，没有切换。
-  - `src/app/sw/sw.ts` 需要 `webworker` 类型环境（`self`、`ServiceWorkerGlobalScope` 等），和主程序 tsconfig 的 `dom` 环境冲突，不能共用一个 tsconfig。**注意**：一开始在项目根目录另建一个同级的 `tsconfig.worker.json`（文件名不同、目录相同）不够——VS Code 给某个文件配对 tsconfig 是按"从该文件所在目录往上找最近的、名字就叫 `tsconfig.json` 的文件"来定的，同目录下改名的兄弟文件它不会主动发现，编辑器还是会用根 `tsconfig.json`（`dom` 环境）检查这个文件，照样报 `Cannot find name 'ServiceWorkerGlobalScope'`。正确做法是**把 sw 相关文件单独放一个子目录、且子目录里的 tsconfig 文件名必须叫 `tsconfig.json`**：`src/app/sw/{sw.ts, tsconfig.json}`（子目录里的 `tsconfig.json` 设 `lib: ["ES2020", "WebWorker"]`，只 `include: ["sw.ts"]`），这样 VS Code 打开 `src/app/sw/sw.ts` 时会先找到这个更近的 `tsconfig.json`。根 `tsconfig.json` 的 `exclude` 加 `src/app/sw`，`pnpm typecheck` 依次跑 `tsc --noEmit && tsc --noEmit -p src/app/sw/tsconfig.json`，两边都有类型检查覆盖。
-- **已验证的行为（非 bug，PWA 通用特性）**：Service Worker 首次安装时不会控制"触发安装的那次页面加载"，要等下一次导航才会真正接管请求。所以"离线也能重新打开 App"这个场景，测试/验证时要先完整访问 → 再刷新一次（在线状态下，让 SW 接管这次导航并把页面缓存进去）→ 才能断网重载验证，否则会看到离线直接加载失败（这不是这个项目的缺陷，是所有基于 Service Worker 的 PWA 的通用行为）。
-- 添加到主屏幕的引导提示：已实现，但只在 Android/Chromium 上生效——`InstallButton`（`src/components/install-button.tsx`）监听 `beforeinstallprompt` 事件，事件不触发时组件不渲染任何内容。iOS Safari 完全不支持这个事件（没有任何 JS API 能触发安装弹窗），只能引导用户手动走"分享 → 添加到主屏幕"，所以 iOS 上没有对应按钮，这是平台限制，不是没做。
+## 10. PWA
 
-## 11. 部署步骤（Vercel Hobby，无 Cron）
+- `src/app/manifest.ts` 生成 `/manifest.webmanifest`，图标在 `public/icons/`；manifest 使用静态品牌蓝，亮/暗浏览器主题色由 `layout.tsx` 的 `viewport.themeColor` 设置。
+- `src/app/sw/sw.ts` 使用 Serwist，`runtimeCaching` 直接复用 `defaultCache`。同源 `/api/*` 用 **NetworkFirst（10 秒超时）**，不是 stale-while-revalidate。
+- `next.config.ts` 用 `@serwist/next`；`dev`、`build` 都显式 `--webpack`。仅禁用 SW 编译不能消除插件与 Turbopack 的冲突。
+- SW 类型环境由 `src/app/sw/tsconfig.json` 单独管理，根配置排除该目录；`pnpm typecheck` 检查主程序与 SW。
+- 离线重载验证应先在线访问、确认 SW 激活并控制页面，再在线重载缓存导航，最后断网重载；不能用首次加载尚未受控的状态判断离线功能。
+- 安装按钮依赖 Chromium/Android 的 `beforeinstallprompt`。iOS Safari 通过“分享 → 添加到主屏幕”安装，无对应脚本弹窗。
 
-1. 本地用 `create-next-app` 初始化项目，接入 Tailwind、@serwist/next、cheerio、idb、chart.js。
-2. 实现 `/api/today`、`/api/history` 两个 Route Handler（各自只抓一个源页面）。
-3. 实现前端页面、IndexedDB 读写逻辑、图表组件。
-4. 本地 `next build && next start` 验证，确认 PWA 可安装、离线可用。
-5. 推送到 GitHub，Vercel Import Project，框架自动识别为 Next.js，无需额外环境变量（本方案不依赖数据库/密钥）。
-6. 部署后用手机浏览器打开，测试"添加到主屏幕"、断网后重新打开、多日后重新打开时历史补齐的场景；同时检查 `/api/today`、`/api/history` 响应头中的 `x-vercel-cache`（HIT/MISS），确认边缘缓存按预期生效。
+## 11. 部署与验证
 
-## 12. 已知限制 / 后续可选优化
+操作命令和 Git 自动部署边界见 [README 的部署说明](../README.md#部署)。
 
-- 首次访问一次性回溯 1 年，早于这个边界的历史无法恢复（源站限制，非本方案缺陷）；1 年内的空档只要之后打开过 App 就能通过增量同步自动补齐，不再有"超过 N 天未打开就产生不可恢复空档"的问题。
-- 若未来想要"无论用户是否打开 App 都完整存档每日数据"，需要引入服务端持久化 + 定时任务（如 Vercel Cron + Vercel KV，或迁移到有免费 Cron 额度的平台），当前方案按用户要求不包含此部分。
-- 若源站结构调整，`/api/today`、`/api/history` 的 cheerio 选择器需要同步更新，建议解析逻辑单独封装，便于维护。
-- 抓取频率建议克制（例如客户端合并请求、加缓存），避免给源站造成压力，也规避被封 IP 的风险。
-- 若后续想加回买入价/现钞价，只需扩展 `/api/today` 和 `/api/history` 的解析字段，以及新增对应的历史子页面（`hui_buy.html` / `chao_buy.html` / `chao_sell.html`），架构上是平滑扩展。
+- Vercel 运行 `pnpm build`；Cloudflare 通过 OpenNext 构建后由 Wrangler 发布。两套构建入口独立。
+- `next.config.ts` 仅在开发阶段初始化 Cloudflare 本地绑定，生产构建不启动 Wrangler 本地运行时。
+- Cloudflare Worker 名称与绑定以 `wrangler.jsonc` 为准，OpenNext 缓存适配器以 `open-next.config.ts` 为准。
+- 已确认的 Cloudflare 发布地址：<https://icbc-rate.liaoshengtian.workers.dev>。Vercel 有历史部署记录，当前线上地址与 Git 集成状态未核实。
+- 配置变更验证标准 Next.js 构建、完整 OpenNext 构建及 Wrangler 发布预检；标准 Next.js 产物不一定包含 OpenNext 要求的 standalone 输出，不能直接用跳过构建代替完整适配器验证。
+- 发布后检查首页、两个 API、PWA 安装、离线重载，以及各平台缓存行为。仅 HTTP 200 不代表业务报价或缓存新鲜度正确。
 
-## 13. 建议的实施顺序（供代码生成参考）
+## 12. 当前限制
 
-1. 初始化 Next.js 项目 + 基础依赖。
-2. 实现 `/api/today` 并用真实请求验证解析正确性（只取现汇卖出价）。
-3. 实现 `/api/history` 并验证解析正确性（`d-icbc-aud.html` 默认页面）。
-4. 搭建 IndexedDB 封装模块（增删查、按日期 upsert、查询空档）。
-5. 搭建首页 UI（购汇价卡片 + 图表 + 时间范围切换）。
-6. 接入 @serwist/next，完成 manifest 与 service worker 配置。
-7. 本地全流程测试（含模拟离线、模拟多日未打开）。
-8. 部署 Vercel，真机验证。
+- 报价按日期覆盖保存；没有日内完整变动记录、后台采集或推送提醒。
+- App 未打开时不累积设备历史，下一次访问按源站实际返回数据补齐；清除站点存储会丢失本机历史。
+- 源站 HTML 变化需同步更新解析函数、fixture 与相关测试，不能依赖调研时的结构永久不变。
+- 测试规范见 AGENTS；现有 E2E 覆盖不等于所有验收路径均已有自动化用例。

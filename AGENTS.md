@@ -7,116 +7,59 @@ This version has breaking changes — APIs, conventions, and file structure may 
 
 # AGENTS.md — 工商银行澳币汇率 PWA
 
-本文件是本项目的 Agent 指导文件，约束后续设计与实现。完整技术方案见 [`docs/blueprint.md`](./docs/blueprint.md)，本文件只提炼**容易出错、容易被遗忘**的约束，两者冲突时以 `docs/blueprint.md` 最新内容为准，发现冲突应先同步更新再继续。
+展示工商银行澳大利亚元的**现汇卖出价（个人购汇价，字段 `huiSell`）**与历史趋势。
 
-## 项目一句话说明
+本文件保留实现约束；接口、同步规则、缓存与部署现状见 [技术方案](docs/blueprint.md)。两者冲突时先核对实现并同步文档，不沿用已过时的描述。
 
-只做一件事：展示工商银行「澳大利亚元」**现汇卖出价（购汇价，字段名 `huiSell`）**的当日报价与历史趋势，纯客户端存储，Vercel 仅作无状态抓取代理。
+## 架构边界
 
-## 架构红线（不要引入）
+- 用户历史数据只存设备 IndexedDB，不新增数据库、KV 或服务端历史归档。Cloudflare 已有 R2 仅作 OpenNext 增量缓存，不作为业务数据存储。
+- 不加 Cron、后台定时采集或应用层服务端限流；源站保护依靠响应缓存。刷新由打开 App、手动刷新/整页重载或返回前台触发，每次返回前台都尝试刷新；同一时间只运行一次同步，不因五分钟缓存窗口跳过唤醒刷新。
+- 只抓取 `huiSell`；Route Handler 只负责抓取、解析和转发，补缺、合并及趋势计算放客户端 `src/lib/`。
+- 新功能涉及突破上述边界时先与用户确认。不要把部署适配器所需缓存扩展成历史数据持久化。
 
-- **不加服务端持久化**（数据库、KV、文件存储）。历史数据只存在用户设备的 IndexedDB。
-- **不加 Cron / 定时任务**。数据刷新只在用户打开 App / 手动刷新（卡片上的刷新按钮，或浏览器原生下拉刷新触发的整页重载）时发生。
-- **不做应用层请求频率限制**（Serverless 实例无状态、水平扩展，内存计数器不可靠）。对源站的保护依赖 `Cache-Control: s-maxage` 边缘缓存，不要为了"限流"引入额外的存储依赖。
-- **不抓取除现汇卖出价以外的价位**（买入价、现钞价等），除非用户明确要求扩展。
-- API Route（`/api/today`、`/api/history`）只做「抓取 → 解析 → 转发 JSON」，不做业务逻辑，业务逻辑（补缺、趋势计算）放在客户端。
+## 领域规则
 
-## 领域规则（容易踩坑，务必遵守）
+- 时间按北京时间（`Asia/Shanghai`、UTC+8）解释，不依赖服务器或设备本地时区。
+- 源站 `MM-DD HH:mm` 无年份：源月份为 12、当前为 1 时取上一年；源月份为 1、当前为 12 时取下一年；其余取当前北京时间年份。
+- `datefrom` 有效；默认回溯 **365 天**，不是源站固定 28 天窗口。先检查本地历史深度，不足时完整回溯；深度足够且最新日期是今天才跳过 history；否则从**本地最新日期本身**增量请求，不能加一天。详见技术方案第 7 节。
+- 当天真实报价只信 `/api/today`；过滤 history 中当天记录。today 失败时保留本地记录，不用 history 的长缓存值替代。
+- 按 history **实际返回的最早至最晚日期**判断空档，不硬编码周末规律。调研样本中周六也有报价。
+- 仅在该区间内沿用最近的前一个真实记录，保存 `source: "carried-forward"` 与指向真实日期的 `carriedFromDate`；不能连续沿用填补记录。后续真实数据 upsert 自动覆盖标记。
+- 无法填补的日期保持缺失，图表断线，不插值。UI 必须区分真实报价和沿用值，并清楚标明来源日期（如“该日期未更新，数据来自 MM-DD”）。
 
-- **术语**：银行「现汇卖出价」= 个人「购汇」。项目内部统一用字段名 `huiSell`，不要用 `sell` / `rate` 等模糊命名。
-- **时区**：源站发布时间字符串（如 `07-24 09:11`）无年份、无时区，一律按**北京时间（Asia/Shanghai, UTC+8）**解释，不依赖服务器本地时区（`Intl` / 日期库需显式指定时区，不要用 `new Date()` 默认行为）。
-- **年份拼接跨年处理**：解析出的月份为 12 且当前月份为 1 → 年份取"当前年份 − 1"；解析出的月份为 1 且当前月份为 12 → 年份取"当前年份 + 1"；否则用当前年份。不要简单地"拼接当前年份"。
-- **空档判断以源站实际发布的日期集合为准，不要假设固定的休市规律**：已用真实数据核对 `d-icbc-aud.html`（2026-06-23 ~ 2026-07-24 期间），**每个周六都有报价，只有周日没有**——工行网站的发布节奏并非"仅工作日"，早期方案里"周六周日都不发布"的假设是错的，不要照搬。判空档时把「本地已有日期」与「`/api/history` 这次实际返回的日期集合」做差集。
-- **本次 `/api/history` 请求区间内的空档：用最近一天真实数据填补，并标注来源，不留白/不断线**：取本地已有的、日期上最近的前一个真实数据的 `huiSell` 填补该日期，写回 IndexedDB 时标成 `source: "carried-forward"` 并记录 `carriedFromDate`（指向真实数据所在日期），UI 上要清楚标注"该日期未更新，数据来自 MM-DD"，不能让用户误以为是当天的真实报价。**只在本次请求实际返回的区间内填补，不臆造区间外的数据**——区间外、彻底追不到真实数据的空档，走下一条规则的"数据缺失"处理，不做填补。
-- **标记的自动清除**：填补记录不需要额外的清理逻辑——只要后续某次同步真的带回了该日期的数据，upsert 用真实记录（`source: "today"` 或 `"history"`）覆盖掉之前的填补记录即可，标记随之消失。
-- **`datefrom` 参数有效，不是硬 28 天窗口**（更正此前的调研结论）：`d-icbc-aud.html?datefrom=YYYY-MM-DD` 已实测有效（`dateto` 省略默认取最新日期），一次请求可拿到 365 天数据。此前记录的"`startdate`/`enddate` 参数无效"是猜错了参数名。`/api/history` 现在接受可选 `datefrom` query 参数，透传给上游；本地为空（首次访问）不传参，服务端 fallback 到"往前 365 天"。服务端仍然是无状态转发（不新增持久化），只是请求区间随客户端已有数据动态变化。历史数据里"今天"那一条会被显式过滤、不参与合并——只信任 `/api/today`（独立的短缓存窗口，见下方缓存章节），避免用 `/api/history` 里可能被缓存了长达 1 小时的陈旧值顶替。回溯边界之外（首次访问 1 年回溯窗口之外）、本地也追不到真实数据的空档才是不可恢复的，走"数据缺失"处理：不做填补、不做插值，标记为"数据缺失（源站未提供更早查询）"，图表上以断线或灰色提示呈现。
-- **客户端算 `datefrom` 时，重新请求"本地最新日期"本身，不是它的下一天**：本地最新日期那一条记录，很可能只是当天中途从 `/api/today` 抓到的快照，不能默认它已经是最终值——所以增量请求用 `datefrom=<本地最新日期>`（而不是 `+1` 天），让 `/api/history` 有机会用真正的收盘数据覆盖掉那条快照。**唯一的例外**：本地最新日期已经是"今天"时，直接跳过这次 `/api/history` 请求——"今天"这一条永远只信任 `/api/today`，此时 `/api/history` 不可能再提供任何新信息，请求属于浪费。
-- **本地历史深度不足时自动整体重新回溯**：只用"本地最新日期"算增量起点不够——设备如果之前只攒过一段较浅的历史（比如运行过旧版本、本地历史深度不到 1 年），单纯的增量请求永远补不到更早的部分。每次同步要同时检查本地最早日期，只要它比"1 年前"更近，就改成不带 `datefrom` 的完整请求重新回溯 1 年（幂等 upsert，覆盖不会破坏已有数据），不依赖用户手动清空 IndexedDB。
+## 技术选型与组织
 
-## 技术栈约束
+- Next.js App Router、TypeScript、pnpm；写 Next.js 代码前读本地对应版本文档。
+- shadcn/ui（**Base UI**）+ Tailwind；基础组件用 CLI 按需生成，生成组件放 `src/components/ui/`，业务组件放 `src/components/`。
+- cheerio 仅服务端使用；IndexedDB 用 `idb`；图表用 Chart.js + react-chartjs-2。
+- PWA 用 `@serwist/next`，`runtimeCaching` 复用 `defaultCache`，不要另造缓存规则或换成 `next-pwa`。
+- 新增依赖优先最新稳定版，有兼容性原因保留旧版时注明理由；有适用脚手架时优先生成再调整。
+- 业务逻辑放 `src/lib/`；单测与源文件同目录，不建顶层 `__tests__`。
 
-| 层        | 选型                                                                         | 备注                                                                                                                                                                                                    |
-| --------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 框架      | Next.js（App Router）                                                        |                                                                                                                                                                                                         |
-| HTML 解析 | cheerio                                                                      | 仅服务端（Route Handler）使用                                                                                                                                                                           |
-| UI 组件   | shadcn/ui（基于 Tailwind CSS，底层原语库为 **Base UI**，非早期版本的 Radix） | 组件用 `npx shadcn add` 按需引入，不要手写重复造轮子的基础组件（Button/Card/Dialog 等）；深度定制样式优先改 Tailwind 配置/CSS 变量，而不是绕开 shadcn 自己写                                            |
-| 主题      | 支持亮色/暗色，**只跟随系统 `prefers-color-scheme`，不提供手动切换按钮**     | 见下方「主题支持」                                                                                                                                                                                      |
-| 图表      | Chart.js + react-chartjs-2                                                   | 两者配合使用（后者是前者的 React 封装），需适配主题色（暗色模式下网格线/文字颜色要跟着变）                                                                                                              |
-| 本地存储  | IndexedDB（通过 `idb` 库封装）                                               |                                                                                                                                                                                                         |
-| PWA       | `@serwist/next`                                                              | 不用 `next-pwa`（对 App Router 兼容性差、维护停滞）；`runtimeCaching` 直接用其 `defaultCache`（已内置 `/api/*` 走 NetworkFirst），不用自己写缓存规则；与 Turbopack 冲突，见下方「Next.js 版本注意事项」 |
-| E2E 测试  | Playwright（`@playwright/test`）                                             | 见下方「测试规范」；配置在根目录 `playwright.config.ts`，用例放 `e2e/`                                                                                                                                  |
-| 部署      | Vercel Hobby（免费版）                                                       | 无 Cron、无数据库                                                                                                                                                                                       |
-| 包管理器  | pnpm                                                                         | 遵循用户全局 CLAUDE.md 约定                                                                                                                                                                             |
+## 主题与布局
 
-## 主题支持
+- `next-themes` 使用 `defaultTheme="system"` + `enableSystem`，只跟随系统，不加手动主题按钮。新 UI 和图表配色须验证亮、暗两种模式。
+- manifest 只有静态主题色；亮暗浏览器主题色通过 `layout.tsx` 的 `viewport.themeColor` 设置。
+- 已有内容在同步中保持结构和值，仅叠加行内加载提示，参考 `RateCard`；不能整块换成骨架屏或加载文字。
+- 同时作为 flex 子元素和 flex 容器的元素默认加 `min-h-0`，避免内容撑破页面。
+- Chart.js 画布旁不要条件渲染占布局空间的 flex 兄弟说明；改用 tooltip 或容器内绝对定位，防止 ResizeObserver 引起布局抖动。
+- PWA 返回前台时保留图表主动 `resize()`，避免手机后台恢复后的画布尺寸错误。
 
-- 使用 shadcn/ui 自带的主题机制（CSS 变量 + `next-themes`：`defaultTheme="system"` + `enableSystem`），只跟随系统设置。**不要加手动切换按钮**——人工评审阶段明确去掉了这个 UI（之前 Phase 1 做过一版亮/暗/跟随系统三按钮切换，后来评审决定移除，`src/components/theme-toggle.tsx` 已删除，不要因为看到 `next-themes` 就顺手加回去）。
-- `manifest.json` 的 `theme_color` / `background_color` 需要同时考虑亮色与暗色两套取值（PWA manifest 本身只支持单一静态值，若要区分需结合 `meta[name=theme-color][media=...]` 或在应用内动态设置）。
-- 图表配色（折线、网格线、坐标轴文字）不能硬编码亮色假设，需要随主题切换联动，参考项目里 `dataviz` skill 的配色方法论保持视觉一致性。
-- 新增 UI 组件时默认要在亮色和暗色下都验证过，不要只测一种主题就提交。
+## 构建与部署易错点
 
-## UI 稳定性：加载态不能替换掉已有内容的结构
+- Serwist 注入 webpack 配置，`dev`、`build` 都必须保留 `--webpack`。仅 `disable: true` 不能消除 Turbopack 冲突。
+- Cloudflare 本地运行时只在 `PHASE_DEVELOPMENT_SERVER` 初始化，生产构建不能无条件调用它。Vercel 用 `pnpm build`，Cloudflare 用 `pnpm deploy`，两边配置保持兼容。
+- Route Handler 的 GET 默认不缓存。`revalidate` 用可静态分析的数字字面量，与 `src/lib/api-cache.ts` 的响应头窗口保持一致；不能仅凭配置就认定 CDN 已缓存。history 读取 query，当前构建仍为动态路由，须另查线上响应。详见技术方案第 6 节。
+- 页面 `params`/`searchParams`、`cookies()`、`headers()` 等异步 API 要 `await`；`NextRequest.nextUrl.searchParams` 是同步 URL API，不混为一谈。
+- SW 独立使用 `src/app/sw/tsconfig.json` 的 WebWorker 类型环境；根 tsconfig 排除该目录，`pnpm typecheck` 检查两套配置。
+- 后续需要中间件时使用 Next.js 16 的 `proxy.ts` 约定。
 
-- 人工评审明确的一条原则：**任何"正在同步/加载"的状态，都不能把已经显示的内容整块换成占位文字/骨架屏**，而是在原有结构里叠加一个不起眼的提示（比如时间戳旁边加"（加载中…）"），同步完成后提示消失、数值原地更新。目的是避免界面在"有数据"和"加载中占位"两种完全不同的布局之间来回跳动。
-- `RateCard`（`src/components/rate-card.tsx`）是这条原则的参考实现：价格、时间戳两行永远渲染，`isSyncing` 只控制时间戳后面那个行内提示的显隐，不控制要不要渲染价格行本身。以后加新的"有本地缓存 + 会后台刷新"的 UI 时，照这个模式来，不要用 `isLoading ? <Skeleton/> : <Content/>` 这种整体替换的写法。
-- **已踩坑：`flex-1` 的 flex 子元素必须显式加 `min-h-0`，否则整页会莫名其妙出现滚动条**。Flex 子元素的默认 `min-height` 是 `auto`，意思是"就算我是 `flex-1`，也绝不会缩得比我子内容的自然高度更小"——这会导致哪怕外层容器（比如 `<main>`）有 `h-full` 这种看起来"钉死"高度的类，只要它自己也是别人的 flex 子元素且没加 `min-h-0`，它就可能被内部子元素的自然高度反向撑高，进而撑破整个页面出滚动条。首页 `main` 曾经因为漏了这一个类，无论怎么调子元素的高度都修不好，最后是给 `main` 本身补上 `min-h-0` 才解决。**规则**：只要某个元素同时满足"是 flex 子元素"+"自己也是 flex 容器（要给子元素分配空间）"，就默认给它加 `min-h-0`，不要假设 `flex-1` 或 `h-full` 会自动处理好。
-- **已踩坑：Chart.js（`react-chartjs-2` 的 `responsive: true`）画布容器旁边不要放"条件渲染的 flex 兄弟节点"**。类似"如果数据里有某种特殊点，就在图表下面多显示一行说明文字"这种写法，一旦这行文字随数据到达的那一刻从无到有，会瞬间改变画布容器的可用空间，触发 Chart.js 内部 `ResizeObserver` 重新计算画布尺寸，容易引出布局抖动、页面高度被意外撑高（`RateChart` 曾经因为这个多余的说明文字导致数据加载完之后出现滚动条）。这类"只在特定数据条件下才出现的辅助说明"，要么整合进 tooltip（悬停/点击时才显示，不占布局空间），要么用 `position: absolute` 叠加在图表容器内部（前提是画布容器本身是 `position: relative`），**不要**作为占用 flex 布局空间的普通兄弟元素条件渲染。
+## 测试与工作流
 
-## Next.js 版本注意事项（当前锁定 16.x，非训练数据里熟悉的版本）
-
-- 写代码前先读 `node_modules/next/dist/docs/` 里对应指南，不要凭训练数据里的旧 API 假设。
-- Route Handler 的 `GET` **默认不缓存**（Next 15+ 起的行为）。**已踩坑并修正**：一开始以为手动在响应里设置 `Cache-Control: s-maxage=...` 头就够了，本地 `curl` 也确实能看到这个头，但部署到 Vercel 后实测**完全没生效**——线上返回的是 `Cache-Control: public, max-age=0, must-revalidate` + `x-vercel-cache: MISS`，手动设的头被平台覆盖了。原因：Vercel 的 CDN 缓存是照 Next 的路由分类（`○` 静态 / `ƒ` 动态）走的，不是照响应头里手动写了什么走的，`GET` handler 默认是动态路由，不会被当成可缓存内容。真正生效的做法是加 `export const revalidate = 300`（ISR 风格的路由级配置），加了之后 `next build` 的路由表会显示这个路由从 `ƒ` 变成 `○ (Static)` 并带 `Revalidate 5m`，这时 Vercel 才会真正走边缘缓存。手动设置的 `Cache-Control` 响应头还是保留着（自托管/非 Vercel 场景下这个头才是真正生效的那个），但**不能只靠这一个头**，`export const revalidate` 才是 Vercel 上真正管用的开关。
-- `params`、`searchParams`、`cookies()`、`headers()` 等一律是异步的（返回 Promise），需要 `await`。
-- `next dev` / `next build` 默认用 Turbopack（无需 `--turbopack` 参数），若未来引入自定义 Webpack 配置需注意兼容性。**已踩坑**：`@serwist/next` 底层是 webpack 插件，next.config 里只要挂了 `webpack(...)` 函数，Turbopack 就会报错拒绝启动——**光靠运行时 `disable: true` 不够**，因为 `withSerwistInit` 不管 `disable` 是什么都会往 config 上挂 `webpack` 键，Next 是看这个键是否存在来判断冲突，不是看它实际会不会执行。真正生效的解法是 `dev`、`build` 两个 script 都显式加 `--webpack`（`next dev --webpack` / `next build --webpack`），`disable: process.env.NODE_ENV !== "production"` 只用来跳过开发环境下没意义的 SW 编译，不能替代 `--webpack`。评估过官方的 `@serwist/turbopack`（esbuild + Route Handler 动态提供 SW，原生免 webpack）作为替代，但集成方式整个不一样（要重写 next.config + 新建 route），官方自己也标了"实验性支持"，权衡后维持 `--webpack` 方案。新增其他依赖 webpack 插件机制的工具时，先假设它和 Turbopack 不兼容，别默认它能直接工作。
-- 中间件文件约定已从 `middleware.ts` 改名为 `proxy.ts`（本项目目前不需要中间件/proxy，若后续要加，用新约定名）。
-
-## 依赖版本与脚手架
-
-- **组件/依赖版本**：新增依赖时，在可能的情况下选最新稳定版本（不主动锁定旧版本），除非有明确的兼容性原因需要降级（需在 commit / 注释中说明原因）。
-- **优先用脚手架生成，而非手写**：凡是有官方或社区脚手架/CLI 的场景，先用工具生成再按需修改，不要从零手写样板代码。例如：
-  - 项目初始化：`create-next-app`（而不是手动搭 Next.js 项目结构）。
-  - shadcn/ui 组件：`npx shadcn add <component>`（而不是手写 Button/Card/Dialog 等基础组件）。
-  - PWA 配置：`@serwist/next` 提供的初始化命令/模板（而不是手写 service worker 注册逻辑）。
-  - 其他类似场景（如 `idb` 的 schema 初始化、Tailwind 配置）同理，优先用官方推荐的初始化方式起步，再针对项目需求调整。
-
-## 目录结构约定
-
-实际目录结构以 `src/` 下的真实文件为准（用 `find src` / `ls` 查看），以下是不直接从文件列表里看出来的约定：
-
-- 测试文件与被测源文件同目录（`*.test.ts` / `*.test.tsx`），不单独建 `__tests__` 顶层目录。
-- `src/components/ui/` 只放 shadcn 生成的组件，业务组件放在 `src/components/` 下、不进 `ui/` 子目录，保持"生成的" vs "手写的"边界清晰。
-- 业务逻辑（尤其是「领域规则」里列的易错逻辑）放在 `src/lib/`，不要直接写在 Route Handler 或页面组件里，方便单测覆盖。
-
-## 迭代工作流（分阶段执行）
-
-本项目按「阶段」（phase）迭代推进；如何开始/收尾一个阶段（计划文档、验收标准、归档流程）见 `phase-workflow` 技能（`.claude/skills/phase-workflow/SKILL.md`），日常改 bug/小改动不需要走这套流程。
-
-### 测试规范
-
-测试分两层，各司其职，不要互相替代：
-
-**单元测试（vitest）**
-
-- 默认测试框架 vitest（遵循用户全局 CLAUDE.md 约定）。
-- 优先覆盖领域规则中容易出错的纯逻辑：时区/跨年拼接、周末补值与空档判定、IndexedDB upsert 与空档查询、cheerio 解析函数。
-- 抓取解析函数（cheerio 选择器）用本地保存的 HTML fixture 测试，不在测试/CI 中直接请求 `kylc.com`，避免测试脆弱、也避免给源站增加压力。
-- 测试文件与被测源文件同目录（见「目录结构约定」），不进 `e2e/`。
-
-**端到端测试（Playwright，`e2e/` 目录，`pnpm test:e2e` 运行）**
-
-- 覆盖真实浏览器里的关键用户路径：加载首页看到购汇价卡片、切换时间范围（7 天/30 天/60 天/90 天/半年/一年）、切换主题（亮/暗/跟随系统）、点击刷新按钮、离线状态下展示已缓存数据等。
-- **必须用 `page.route()` mock 掉 `/api/today`、`/api/history` 的响应**，不依赖真实网络或 `kylc.com`——原因和单测里不直接请求源站一致：避免测试脆弱、避免拖慢/污染源站，也让空档/跨年等边界场景可以用固定 mock 数据稳定复现（否则依赖当天真实数据，边界场景很难测到）。
-- Playwright 配置（`playwright.config.ts`）已配好 `webServer`，理论上跑 `pnpm test:e2e` 会自动拉起 `next dev` 并等待就绪，不需要手动先起 dev server。**已知问题**：在某些环境下（本项目开发过程中遇到过），Playwright 自己 spawn 的 dev server 会在首次编译时卡死不返回，但手动先跑 `pnpm dev`、等它就绪后再跑 `pnpm test:e2e`（这时 Playwright 会复用已有的 server）每次都稳定。没有完全定位到根因（怀疑是沙箱环境下的进程/端口状态问题，不是应用本身的缺陷——同样的 mock 逻辑对着手动起的 server 反复验证过都是对的）。`pnpm test:e2e` 卡住不返回时，直接用这个手动预热的方式绕过去，不用继续深挖。
-- 当前只跑 Chromium 一个浏览器项目（个人项目，不需要跨浏览器矩阵）；如果以后发现要覆盖 Safari 特有的 PWA/离线行为，再按需加 webkit 项目。
-- 从 Phase 4（首页 UI）开始，每个改动用户可见路径的阶段都要新增/更新对应 e2e case，作为该阶段验收标准的一部分；Phase 1-3（脚手架/API/IndexedDB）没有面向用户的 UI，暂不强制写 e2e，用单测覆盖即可。
-
-### Git 规范（在用户全局 Conventional Commits 约定之上补充）
-
-- **阶段内的 commit 可以自主创建**，无需每次都找用户确认——这是本文档对"仅在用户明确要求时才 commit"这一全局默认规则的一次性、限定范围的授权，只适用于本项目里符合本工作流的阶段内 commit。
-- 阶段收尾的文档迁移/清理单独一个 commit，message 形如 `docs(<scope>): consolidate phase N docs into blueprint/AGENTS`。
-- `git push` 仍需用户显式确认，不在自动授权范围内（推送涉及远端共享状态，风险等级不同于本地 commit）。
-- 每个阶段建议对应一组逻辑清晰的 commit（不强制 one-phase-one-commit），但避免把多个阶段的改动混进同一个 commit。
-
-## 实现前必读
-
-新起一个功能或改动架构相关内容前，先确认是否与 `docs/blueprint.md` 的「架构红线」冲突；如果要突破红线（例如加服务端存储），先跟用户确认，不要自行决定。
+- Vitest 覆盖时区/跨年、解析、upsert、空档填补等领域逻辑；HTML 解析用本地 fixture，测试不请求 `kylc.com`。
+- Playwright 用例放 `e2e/`，必须 `page.route()` mock 两个 API（包含 query 请求）。验证卡片、现有时间范围、系统主题变化、刷新、加载结构与缓存/离线路径；这些是覆盖要求，不表示现有用例已全部覆盖。
+- 当前 Playwright 只跑 Chromium。若自动启动 dev server 卡住，先手动启动 `pnpm dev`，就绪后再跑 `pnpm test:e2e` 复用服务。
+- 常用命令见 [README](README.md)。分阶段功能的计划与验收见 [阶段工作流](docs/phase-workflow.md)，日常小改无需建立阶段文档。
+- 阶段内可自主创建 Conventional Commits；日常改动仅在用户要求时提交。阶段收尾文档整理单独提交，不混入其他阶段。
+- `git push` 仍需用户明确授权；本地部署命令不会推送 GitHub。
