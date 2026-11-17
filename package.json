@@ -2,6 +2,9 @@
   "name": "icbc-rate",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "pnpm": "11.x"
+  },
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",

@@ -8,9 +8,11 @@
 
 ## 开发
 
+项目通过 `package.json` 的 `engines.pnpm` 声明使用 `11.x`；通过 `corepack pnpm@11` 选择符合范围的版本，允许 11 系列更新，不自动升级到 12。不同时间构建可能使用不同的小版本，应用依赖仍由 `pnpm-lock.yaml` 锁定。
+
 ```bash
-pnpm install
-pnpm dev
+corepack pnpm@11 install --frozen-lockfile
+corepack pnpm@11 dev
 ```
 
 打开 [http://localhost:3000](http://localhost:3000)。
@@ -45,9 +47,12 @@ Cloudflare 本地运行时只在 `pnpm dev` 的开发阶段初始化；两边的
 | -------- | ---------------------------------------- |
 | 生产分支 | `main`                                   |
 | 根目录   | `/`（仓库根目录）                        |
+| 构建变量 | `PNPM_VERSION=11`（选择 pnpm 11 系列）   |
 | 构建命令 | `pnpm exec opennextjs-cloudflare build`  |
 | 部署命令 | `pnpm exec opennextjs-cloudflare deploy` |
 
 构建和部署拆开执行，避免部署阶段再次构建；Worker 名称必须与 `wrangler.jsonc` 的 `name`（`icbc-rate`）一致。保存后，推送到 GitHub 的 `main` 分支才会触发自动部署，本地 commit 不会触发。配置是否成功以后台连接状态和首次构建日志为准。
+
+`engines.pnpm` 只声明版本要求，不负责让 Cloudflare 自动选择版本。必须在 **Settings → Builds → Build variables and secrets** 设置 `PNPM_VERSION=11`，防止自动安装回退到 pnpm 9；不要另加固定小版本的顶层 `packageManager` 覆盖它。较旧的 Corepack 不支持用 `devEngines.packageManager` 的范围选择版本，因此使用显式 `pnpm@11` 命令和平台构建变量。若仍出现 `packages field missing or empty`，检查日志中的实际 pnpm 版本、构建变量和当前提交的 workspace 配置。
 
 Wrangler 登录成功不代表具备管理自动构建的权限。若通过 API 配置，还需要用户级 API token 的 `Workers Builds Configuration: Edit` 权限，以及 Cloudflare GitHub App 授权和部署用 build token；不要将令牌写入仓库或聊天。详见 [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) 和 [Builds API](https://developers.cloudflare.com/workers/ci-cd/builds/api-reference/)。
