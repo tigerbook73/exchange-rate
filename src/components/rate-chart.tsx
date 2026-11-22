@@ -11,32 +11,9 @@ import {
   type Plugin,
 } from "chart.js";
 import { useTheme } from "next-themes";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Line } from "react-chartjs-2";
 import type { ChartPoint } from "@/lib/rate-view";
-
-// Draws a vertical reference line through the currently hovered/touched
-// data point, so a finger dragging across the chart gets a visible
-// crosshair alongside the tooltip.
-const crosshairPlugin: Plugin<"line"> = {
-  id: "crosshair",
-  afterDraw: (chart) => {
-    const active = chart.getActiveElements()[0];
-    if (!active) {
-      return;
-    }
-    const { ctx, chartArea } = chart;
-    const x = active.element.x;
-    ctx.save();
-    ctx.beginPath();
-    ctx.moveTo(x, chartArea.top);
-    ctx.lineTo(x, chartArea.bottom);
-    ctx.lineWidth = 1;
-    ctx.strokeStyle = chart.options.plugins?.crosshair?.color ?? "#8888";
-    ctx.stroke();
-    ctx.restore();
-  },
-};
 
 ChartJS.register(
   CategoryScale,
@@ -44,14 +21,12 @@ ChartJS.register(
   PointElement,
   LineElement,
   Tooltip,
-  crosshairPlugin,
 );
 
-declare module "chart.js" {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- must match chart.js's own generic signature to merge
-  interface PluginOptionsByType<TType> {
-    crosshair?: { color?: string };
-  }
+// Fast Refresh can retain the old globally registered canvas plugin after
+// switching to a local overlay plugin. Remove it from existing dev charts.
+if (process.env.NODE_ENV === "development") {
+  ChartJS.unregister({ id: "crosshair" });
 }
 
 // Reused from the app's existing shadcn theme tokens (see globals.css), plus
@@ -63,14 +38,48 @@ const PALETTE = {
     line: "#2563eb",
     grid: "oklch(0.922 0 0)",
     text: "oklch(0.556 0 0)",
+    crosshair: "oklch(0.556 0 0 / 0.55)",
   },
-  dark: { line: "#3b82f6", grid: "oklch(0.269 0 0)", text: "oklch(0.708 0 0)" },
+  dark: {
+    line: "#3b82f6",
+    grid: "oklch(0.269 0 0)",
+    text: "oklch(0.708 0 0)",
+    crosshair: "oklch(0.828 0.189 84.429 / 0.45)", // Subdued amber-400.
+  },
 };
 
-export function RateChart({ points }: { points: ChartPoint[] }) {
+export function RateChart({
+  points,
+  emptyMessage = "该时段暂无已缓存数据",
+}: {
+  points: ChartPoint[];
+  emptyMessage?: string;
+}) {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   const chartRef = useRef<ChartJS<"line"> | null>(null);
+  const crosshairRef = useRef<HTMLDivElement | null>(null);
+  const crosshairPlugin = useMemo<Plugin<"line">>(
+    () => ({
+      id: "single-crosshair",
+      afterDraw(chart) {
+        const line = crosshairRef.current;
+        if (!line) return;
+        const active = chart.getActiveElements()[0];
+        if (!active) {
+          line.style.display = "none";
+          return;
+        }
+        // Move one overlay instead of adding strokes to the shared canvas.
+        line.style.display = "block";
+        line.style.transform = "none";
+        line.style.left = `${Math.round(active.element.x) - 1}px`;
+        line.style.top = `${chart.chartArea.top}px`;
+        line.style.height = `${chart.chartArea.bottom - chart.chartArea.top}px`;
+      },
+    }),
+    [],
+  );
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-mount flag, cannot be derived from props/state
     setMounted(true);
@@ -97,12 +106,12 @@ export function RateChart({ points }: { points: ChartPoint[] }) {
     mounted && resolvedTheme === "dark" ? PALETTE.dark : PALETTE.light;
 
   // Beyond ~30 days there are too many points for individual markers to
-  // stay legible, so only the line itself is shown; the carried-forward
-  // "hollow circle" marking still works via tooltip at any range.
+  // stay legible, so only the line itself is shown. Source notes remain
+  // available in the tooltip at every range.
   const showMarkers = points.length <= 30;
 
   const data = {
-    labels: points.map((p) => p.date.slice(5)), // "MM-DD"
+    labels: points.map((p) => p.label ?? p.date.slice(5)),
     datasets: [
       {
         data: points.map((p) => p.huiSell),
@@ -110,15 +119,13 @@ export function RateChart({ points }: { points: ChartPoint[] }) {
         backgroundColor: colors.line,
         borderWidth: 2,
         spanGaps: false,
-        pointRadius: points.map((p) => {
-          if (p.huiSell === null || !showMarkers) return 0;
-          return p.isCarriedForward ? 5 : 3;
-        }),
-        pointBackgroundColor: points.map((p) =>
-          p.isCarriedForward ? "transparent" : colors.line,
+        pointRadius: points.map((p) =>
+          p.huiSell !== null && showMarkers && !p.isReference ? 3 : 0,
         ),
+        pointHoverRadius: points.map((p) => (p.isReference ? 0 : 4)),
+        pointBackgroundColor: colors.line,
         pointBorderColor: colors.line,
-        pointBorderWidth: points.map((p) => (p.isCarriedForward ? 2 : 0)),
+        pointBorderWidth: 0,
       },
     ],
   };
@@ -130,16 +137,13 @@ export function RateChart({ points }: { points: ChartPoint[] }) {
     interaction: { mode: "index", intersect: false },
     hover: { mode: "index", intersect: false },
     plugins: {
-      crosshair: { color: colors.grid },
       tooltip: {
         mode: "index",
         intersect: false,
         callbacks: {
           afterLabel: (item) => {
             const point = points[item.dataIndex];
-            return point?.isCarriedForward
-              ? "该日期未更新，沿用前一日数据"
-              : "";
+            return point?.note ?? "";
           },
         },
       },
@@ -155,7 +159,26 @@ export function RateChart({ points }: { points: ChartPoint[] }) {
 
   return (
     <div className="relative min-h-0 flex-1">
-      <Line ref={chartRef} data={data} options={options} />
+      <Line
+        ref={chartRef}
+        data={data}
+        options={options}
+        plugins={[crosshairPlugin]}
+        role="img"
+        aria-label="澳元购汇价走势图"
+      />
+      <div
+        ref={crosshairRef}
+        data-chart-crosshair=""
+        aria-hidden="true"
+        className="pointer-events-none absolute left-0 hidden w-0.5 transition-none"
+        style={{ backgroundColor: colors.crosshair }}
+      />
+      {points.every((point) => point.huiSell === null) ? (
+        <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+          {emptyMessage}
+        </p>
+      ) : null}
     </div>
   );
 }

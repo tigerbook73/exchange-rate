@@ -13,6 +13,7 @@ function formatUpdatedAt(publishedAt: string): string {
   const date = new Date(publishedAt);
   return new Intl.DateTimeFormat("zh-CN", {
     timeZone: "Asia/Shanghai",
+    year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "2-digit",
@@ -23,12 +24,12 @@ function formatUpdatedAt(publishedAt: string): string {
 export function RateCard({
   rate,
   isSyncing,
+  updateNote,
   onRefresh,
 }: {
   rate: CurrentRateView | null;
-  /** True while a background sync is in flight — shown as an inline note
-   * next to the timestamp rather than swapping out the card's layout, so
-   * the card never jumps between a "loading" skeleton and its real content. */
+  updateNote?: string | null;
+  /** Show a rotating icon beside the price while preserving its value and layout. */
   isSyncing: boolean;
   onRefresh: () => void;
 }) {
@@ -47,17 +48,27 @@ export function RateCard({
             disabled={isSyncing}
             onClick={onRefresh}
           >
-            <RefreshCw
-              className={`size-4 ${isSyncing ? "animate-spin" : ""}`}
-            />
+            <RefreshCw className="size-4" />
           </Button>
         </CardAction>
       </CardHeader>
-      <CardContent className="flex flex-1 flex-col">
-        <div className="flex flex-1 flex-col justify-center">
-          <p className="text-6xl font-semibold tabular-nums">
+      <CardContent className="@container flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 items-center gap-3 text-[clamp(2rem,18cqw,3.75rem)]">
+          <p className="font-semibold tabular-nums">
             {rate ? rate.huiSell.toFixed(4) : "－－－－"}
           </p>
+          <span
+            className="inline-flex size-[0.8em] shrink-0 text-muted-foreground"
+            role={isSyncing ? "status" : undefined}
+            aria-label={isSyncing ? "正在刷新汇率" : undefined}
+          >
+            {isSyncing ? (
+              <RefreshCw
+                className="size-full animate-spin"
+                aria-hidden="true"
+              />
+            ) : null}
+          </span>
         </div>
         <p className="text-base text-muted-foreground">
           {rate
@@ -65,7 +76,14 @@ export function RateCard({
               ? `更新于 ${formatUpdatedAt(rate.publishedAt)}`
               : `数据日期 ${rate.date}`
             : "暂无本地数据"}
-          {isSyncing ? "（加载中…）" : ""}
+          {updateNote ? (
+            <>
+              {" · "}
+              <span className="text-amber-600 dark:text-amber-400">
+                {updateNote}
+              </span>
+            </>
+          ) : null}
         </p>
         {rate?.staleNote ? (
           <p className="mt-2 text-base text-amber-600 dark:text-amber-400">

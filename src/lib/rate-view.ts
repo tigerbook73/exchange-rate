@@ -1,9 +1,11 @@
 import { addDays, getBeijingDateString } from "./date";
 import type { RateRecord } from "./rates-db";
 
-export type RangeOption = "7d" | "30d" | "90d" | "180d" | "365d";
+export type HistoryRange = "7d" | "30d" | "90d" | "180d" | "365d";
+export type RangeOption = "1d" | HistoryRange;
 
 export const RANGE_LABELS: Record<RangeOption, string> = {
+  "1d": "1 日",
   "7d": "7 天",
   "30d": "30 天",
   "90d": "90 天",
@@ -46,13 +48,17 @@ export function getCurrentRateView(
 }
 
 export interface ChartPoint {
+  /** A display-only previous-close reference, not a sampled observation. */
+  isReference?: boolean;
+  label?: string;
+  note?: string;
   date: string;
   /** null marks an unrecoverable gap — no local record could be found for this date. */
   huiSell: number | null;
   isCarriedForward: boolean;
 }
 
-const RANGE_DAYS: Record<RangeOption, number> = {
+const RANGE_DAYS: Record<HistoryRange, number> = {
   "7d": 7,
   "30d": 30,
   "90d": 90,
@@ -68,7 +74,7 @@ const RANGE_DAYS: Record<RangeOption, number> = {
  */
 export function buildChartSeries(
   records: RateRecord[],
-  range: RangeOption,
+  range: HistoryRange,
   today: string = getBeijingDateString(),
 ): ChartPoint[] {
   if (records.length === 0) {
@@ -85,6 +91,10 @@ export function buildChartSeries(
       date,
       huiSell: record ? record.huiSell : null,
       isCarriedForward: record?.source === "carried-forward",
+      note:
+        record?.source === "carried-forward"
+          ? `该日期未更新，数据来自 ${record.carriedFromDate}`
+          : undefined,
     });
   }
   return points;

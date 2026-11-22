@@ -1,40 +1,20 @@
-import { NextResponse } from "next/server";
-import { TODAY_REVALIDATE_SECONDS } from "@/lib/api-cache";
-import type { TodayResponse } from "@/lib/api-types";
-import { parsePublishedAt } from "@/lib/date";
-import { parseTodayHtml } from "@/lib/parse-today";
-import { fetchSourceHtml, TODAY_SOURCE_URL } from "@/lib/sources";
+import { queryError, queryServer, serverJson } from "@/lib/server-api";
 
-// Vercel's CDN caches Route Handlers based on this ISR-style config, not the
-// manually-set Cache-Control header below (that header is what's actually
-// respected under self-hosting / other platforms, so we keep both). Next.js
-// statically analyzes this export, so it must stay a literal — keep it equal
-// to TODAY_REVALIDATE_SECONDS (used below for the header) by hand.
-export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    const html = await fetchSourceHtml(TODAY_SOURCE_URL);
-    const { huiSell, publishedAtRaw } = parseTodayHtml(html);
-    const { date, publishedAt } = parsePublishedAt(publishedAtRaw);
-
-    const body: TodayResponse = {
+    const data = await queryServer();
+    const quote = data.state.lastSuccess;
+    if (!quote) return queryError(new Error("No quote"));
+    return serverJson({
       bank: "icbc",
       currency: "aud",
-      date,
-      publishedAt,
-      huiSell,
-    };
-    return NextResponse.json(body, {
-      headers: {
-        "Cache-Control": `s-maxage=${TODAY_REVALIDATE_SECONDS}, stale-while-revalidate`,
-      },
+      date: quote.date,
+      publishedAt: quote.publishedAt,
+      huiSell: quote.priceUnits / 10000,
     });
   } catch (error) {
-    console.error("[/api/today] failed:", error);
-    return NextResponse.json(
-      { error: "Failed to fetch today's rate" },
-      { status: 502 },
-    );
+    return queryError(error);
   }
 }

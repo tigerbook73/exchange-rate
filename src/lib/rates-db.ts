@@ -1,4 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
+import type { IntradayPoint, SyncResponse } from "./server-types";
 
 export type RateSource = "today" | "history" | "carried-forward";
 
@@ -14,6 +15,8 @@ export interface RateRecord {
 }
 
 interface FxCacheSchema extends DBSchema {
+  points: { key: number; value: IntradayPoint };
+  server: { key: string; value: SyncResponse };
   rates: {
     key: string;
     value: RateRecord;
@@ -21,7 +24,7 @@ interface FxCacheSchema extends DBSchema {
 }
 
 const DB_NAME = "fx-cache";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = "rates";
 
 export type RatesDb = IDBPDatabase<FxCacheSchema>;
@@ -29,7 +32,12 @@ export type RatesDb = IDBPDatabase<FxCacheSchema>;
 export function openRatesDb(): Promise<RatesDb> {
   return openDB<FxCacheSchema>(DB_NAME, DB_VERSION, {
     upgrade(db) {
-      db.createObjectStore(STORE_NAME, { keyPath: "date" });
+      if (!db.objectStoreNames.contains(STORE_NAME))
+        db.createObjectStore(STORE_NAME, { keyPath: "date" });
+      if (!db.objectStoreNames.contains("points"))
+        db.createObjectStore("points", { keyPath: "minute" });
+      if (!db.objectStoreNames.contains("server"))
+        db.createObjectStore("server");
     },
   });
 }

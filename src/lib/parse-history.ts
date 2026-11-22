@@ -1,4 +1,5 @@
-import * as cheerio from "cheerio";
+import * as cheerio from "cheerio/slim";
+import { isValidDate } from "./date";
 
 export interface HistoryPoint {
   /** ISO date, e.g. "2026-07-24" — the source already includes the year here. */
@@ -26,11 +27,17 @@ export function parseHistoryHtml(html: string): HistoryPoint[] {
     const huiSellText = cells.eq(1).find(".td_rate").first().text().trim();
     const huiSell = Number(huiSellText);
 
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(huiSell)) {
-      return;
+    if (
+      !isValidDate(date) ||
+      !/^\d+(?:\.\d{1,4})?$/.test(huiSellText) ||
+      !Number.isFinite(huiSell) ||
+      huiSell <= 0
+    ) {
+      throw new Error("Malformed history row");
     }
     points.push({ date, huiSell });
   });
 
+  if (points.length === 0) throw new Error("History table is empty or missing");
   return points;
 }

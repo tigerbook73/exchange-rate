@@ -1,0 +1,21 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "icbc-rate-collector",
+  "account_id": "efda20f0c218e9d7193bcd2b228c35de",
+  "workers_dev": false,
+  "preview_urls": false,
+  "main": "index.ts",
+  "compatibility_date": "2026-11-22",
+  "compatibility_flags": ["global_fetch_strictly_public"],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "icbc-rate",
+      "database_id": "d6a2a857-d667-4344-a049-ee4457ddb4ee",
+      "preview_database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "../migrations",
+    },
+  ],
+  "triggers": { "crons": ["* * * * *"] },
+  "observability": { "enabled": true, "traces": { "enabled": true } },
+}

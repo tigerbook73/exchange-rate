@@ -9,6 +9,12 @@ const fixture = readFileSync(
 );
 
 describe("parseHistoryHtml", () => {
+  it("rejects an empty table and malformed calendar dates", () => {
+    expect(() => parseHistoryHtml("<html></html>")).toThrow();
+    expect(() =>
+      parseHistoryHtml(fixture.replaceAll("2026-07-24", "2026-02-30")),
+    ).toThrow();
+  });
   it("parses the daily data table, not the summary table", () => {
     const points = parseHistoryHtml(fixture);
 

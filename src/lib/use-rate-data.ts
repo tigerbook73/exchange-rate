@@ -1,150 +1,192 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { HISTORY_LOOKBACK_DAYS } from "./api-cache";
-import type { HistoryResponse, TodayResponse } from "./api-types";
-import { addDays, getBeijingDateString } from "./date";
+import { applyServerSync, readClientCache } from "./client-sync";
+import { openRatesDb } from "./rates-db";
+import type { SyncResponse } from "./server-types";
+import { SYNC_SCHEMA } from "./server-types";
 import {
-  getAllRates,
-  getEarliestDate,
-  getLatestDate,
-  openRatesDb,
-  type RateRecord,
-} from "./rates-db";
-import { syncRates } from "./rates-sync";
+  ApiUpgradeRequired,
+  clearOldApiResponses,
+  isSchemaVersion,
+  needsCacheReset,
+  prepareApiUpgrade,
+  readUpgradeTicket,
+  UPGRADE_KEY,
+} from "./api-upgrade";
 
-export interface UseRateDataResult {
-  records: RateRecord[];
-  /** True only for the very first load, before any local data is on screen. */
-  isLoading: boolean;
-  /** True while a background sync (initial load or manual refresh) is in flight. */
-  isSyncing: boolean;
-  error: string | null;
-  refresh: () => Promise<void>;
-}
+type Cache = Awaited<ReturnType<typeof readClientCache>>;
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`${url} responded with ${response.status}`);
-  }
-  return (await response.json()) as T;
-}
-
-/**
- * Loads cached rates from IndexedDB immediately, then syncs with
- * /api/today + /api/history in the background (on mount and on demand).
- * IndexedDB access only exists client-side, hence "use client".
- */
-export function useRateData(): UseRateDataResult {
-  const [records, setRecords] = useState<RateRecord[]>([]);
+export function useRateData() {
+  const [cache, setCache] = useState<Cache>({
+    records: [],
+    points: [],
+    server: null,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isRefreshingRef = useRef(false);
+  const [online, setOnline] = useState(true);
+  const [now, setNow] = useState(Date.now);
+  const refreshing = useRef(false);
+  const mounted = useRef(false);
+  const activeRequest = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
-    // Mobile wake-up can emit visibilitychange, pageshow and focus together.
-    // Keep a single sync in flight, including the initial/manual refresh.
-    if (isRefreshingRef.current) return;
-    isRefreshingRef.current = true;
+    if (refreshing.current) return;
+    if (!navigator.onLine) {
+      setOnline(false);
+      setIsLoading(false);
+      return;
+    }
+    refreshing.current = true;
     setIsSyncing(true);
+    const abort = new AbortController();
+    activeRequest.current = abort;
+    const timeout = setTimeout(() => abort.abort(), 20_000);
     try {
       const db = await openRatesDb();
-      const [latestLocalDate, earliestLocalDate] = await Promise.all([
-        getLatestDate(db),
-        getEarliestDate(db),
-      ]);
-      const beijingToday = getBeijingDateString();
-      // Local history might exist but not go back far enough yet — e.g. a
-      // device that only ever ran an older build that capped it at ~28 days.
-      // In that case a plain incremental fetch would never backfill the
-      // missing older days, so fall back to a full re-backfill instead.
-      const backfillBoundary = addDays(beijingToday, -HISTORY_LOOKBACK_DAYS);
-      const needsBackfill =
-        !earliestLocalDate || earliestLocalDate > backfillBoundary;
-      // The local record for `latestLocalDate` may only be a same-day
-      // /api/today snapshot (grabbed before that day's rate was finalized),
-      // not yet confirmed against /api/history — so re-request that date
-      // too (`datefrom = latestLocalDate`, not `+ 1`) rather than treating
-      // it as settled just because we have *some* value for it. Once
-      // history returns a row for that date it overwrites the /api/today-
-      // sourced one (see toRateRecords), correcting it if needed.
-      // Only skip entirely once local history is caught up to today itself
-      // — today's row always comes from /api/today, never /api/history (see
-      // toRateRecords), so a history call at that point has nothing to add.
-      const upToDate = !needsBackfill && latestLocalDate === beijingToday;
-      const historyUrl =
-        latestLocalDate && !needsBackfill
-          ? `/api/history?datefrom=${latestLocalDate}`
-          : "/api/history";
-      const [today, history] = await Promise.all([
-        fetchJson<TodayResponse>("/api/today").catch(() => null),
-        upToDate
-          ? Promise.resolve<HistoryResponse>({
-              currency: "aud",
-              bank: "icbc",
-              field: "huiSell",
-              series: [],
-            })
-          : fetchJson<HistoryResponse>(historyUrl),
-      ]);
-      await syncRates(db, today, history);
-      setRecords(await getAllRates(db));
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "同步失败");
-    } finally {
-      isRefreshingRef.current = false;
-      setIsSyncing(false);
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadThenSync() {
-      const db = await openRatesDb();
-      const cached = await getAllRates(db);
-      if (!cancelled && cached.length > 0) {
-        setRecords(cached);
-        setIsLoading(false);
+      const previous = await db.get("server", "current");
+      let ticket = null;
+      try {
+        ticket = readUpgradeTicket(sessionStorage);
+      } catch {
+        /* Storage may be unavailable; normal data sync still works. */
       }
-      await refresh();
+      let resetLocalCache = needsCacheReset(previous);
+      const bootstrapUrl = `/api/sync?schema=${SYNC_SCHEMA}`;
+      let response = await fetch(
+        previous && !resetLocalCache
+          ? `${bootstrapUrl}&cursor=${encodeURIComponent(previous.cursor)}`
+          : bootstrapUrl,
+        { signal: abort.signal },
+      );
+      if (response.status === 409)
+        response = await fetch(bootstrapUrl, { signal: abort.signal });
+      if (response.status === 426) {
+        const value: { error?: string; schema?: unknown } =
+          await response.json();
+        if (
+          value.error === "client_upgrade_required" &&
+          isSchemaVersion(value.schema)
+        )
+          throw new ApiUpgradeRequired(value.schema);
+      }
+      if (!response.ok)
+        throw new Error(
+          response.status === 503
+            ? "服务端数据尚未就绪"
+            : `同步失败（${response.status}）`,
+        );
+      const data: SyncResponse = await response.json();
+      if (isSchemaVersion(data.schema) && data.schema !== SYNC_SCHEMA)
+        throw new ApiUpgradeRequired(data.schema);
+      resetLocalCache ||= Boolean(
+        previous &&
+        data.mode === "snapshot" &&
+        previous.datasetId !== data.datasetId,
+      );
+      await applyServerSync(db, data, resetLocalCache);
+      if (resetLocalCache || ticket?.targetSchema === SYNC_SCHEMA) {
+        try {
+          await clearOldApiResponses();
+          sessionStorage.removeItem(UPGRADE_KEY);
+        } catch {
+          /* IndexedDB is already safely committed; cleanup is best effort. */
+        }
+      }
+      const updated = await readClientCache(db);
+      if (mounted.current) {
+        setCache(updated);
+        setError(null);
+        setOnline(navigator.onLine);
+      }
+    } catch (err) {
+      if (mounted.current) {
+        if (err instanceof ApiUpgradeRequired) {
+          let reload = false;
+          try {
+            reload =
+              navigator.onLine &&
+              document.visibilityState === "visible" &&
+              prepareApiUpgrade(err.targetSchema, sessionStorage);
+          } catch {
+            /* Do not reload without a durable loop guard. */
+          }
+          if (reload) {
+            setError("接口版本已更新，正在刷新应用…");
+            window.location.reload();
+          } else
+            setError(
+              "接口版本不兼容，自动更新未完成，请联网后重新打开应用（保留旧缓存）",
+            );
+        } else if (!navigator.onLine) {
+          setOnline(false);
+          setError(null);
+        } else
+          setError(
+            err instanceof Error && err.name !== "AbortError"
+              ? err.message
+              : "服务端连接超时",
+          );
+      }
+    } finally {
+      clearTimeout(timeout);
+      refreshing.current = false;
+      activeRequest.current = null;
+      if (mounted.current) {
+        setIsSyncing(false);
+        setIsLoading(false);
+        setNow(Date.now());
+      }
     }
-
-    void loadThenSync();
-    return () => {
-      cancelled = true;
-    };
-    // `refresh` is stable (useCallback with no deps); only run on mount.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    // A resumed PWA may keep the component mounted. Always try to sync
-    // when it becomes visible; shared API caching still protects the source.
-    function refreshWhenVisible() {
-      if (document.visibilityState !== "visible") return;
-      void refresh();
+    mounted.current = true;
+    void (async () => {
+      try {
+        const db = await openRatesDb();
+        const existing = await readClientCache(db);
+        if (mounted.current) {
+          setCache(existing);
+          if (existing.records.length || existing.server) setIsLoading(false);
+        }
+      } catch {
+        if (mounted.current) setError("无法读取本地缓存");
+      }
+      if (mounted.current) await refresh();
+    })();
+    function wake() {
+      setNow(Date.now());
+      setOnline(navigator.onLine);
+      if (document.visibilityState === "visible" && navigator.onLine)
+        void refresh();
     }
-
-    function handlePageShow(event: PageTransitionEvent) {
-      // Initial navigation is already handled by loadThenSync. A bfcache
-      // restore does not remount React, so it needs an explicit refresh.
-      if (event.persisted) refreshWhenVisible();
+    function offline() {
+      setOnline(false);
+      activeRequest.current?.abort();
     }
-
-    document.addEventListener("visibilitychange", refreshWhenVisible);
-    window.addEventListener("pageshow", handlePageShow);
-    window.addEventListener("focus", refreshWhenVisible);
+    function pageshow(event: PageTransitionEvent) {
+      if (event.persisted) wake();
+    }
+    const timer = setInterval(wake, 60_000);
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("focus", wake);
+    window.addEventListener("pageshow", pageshow);
+    window.addEventListener("online", wake);
+    window.addEventListener("offline", offline);
     return () => {
-      document.removeEventListener("visibilitychange", refreshWhenVisible);
-      window.removeEventListener("pageshow", handlePageShow);
-      window.removeEventListener("focus", refreshWhenVisible);
+      mounted.current = false;
+      clearInterval(timer);
+      activeRequest.current?.abort();
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("focus", wake);
+      window.removeEventListener("pageshow", pageshow);
+      window.removeEventListener("online", wake);
+      window.removeEventListener("offline", offline);
     };
   }, [refresh]);
 
-  return { records, isLoading, isSyncing, error, refresh };
+  return { ...cache, isLoading, isSyncing, error, online, now, refresh };
 }

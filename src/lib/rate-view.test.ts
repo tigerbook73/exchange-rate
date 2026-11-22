@@ -100,6 +100,7 @@ describe("buildChartSeries", () => {
       date: "2026-07-19",
       huiSell: 4.75,
       isCarriedForward: true,
+      note: "该日期未更新，数据来自 2026-07-18",
     });
   });
 

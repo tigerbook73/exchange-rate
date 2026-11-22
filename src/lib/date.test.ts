@@ -37,5 +37,7 @@ describe("parsePublishedAt", () => {
 
   it("throws on an unrecognized format", () => {
     expect(() => parsePublishedAt("not-a-date")).toThrow();
+    expect(() => parsePublishedAt("02-30 10:00")).toThrow();
+    expect(() => parsePublishedAt("11-22 24:00")).toThrow();
   });
 });

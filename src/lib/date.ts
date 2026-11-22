@@ -55,8 +55,20 @@ export function parsePublishedAt(
   }
 
   const date = `${year}-${pad2(month)}-${pad2(day)}`;
+  if (!isValidDate(date) || hour > 23 || minute > 59) {
+    throw new Error(`Invalid publishedAt: "${raw}"`);
+  }
   const publishedAt = `${date}T${pad2(hour)}:${pad2(minute)}:00+08:00`;
   return { date, publishedAt };
+}
+
+export function isValidDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return (
+    Number.isFinite(parsed.getTime()) &&
+    parsed.toISOString().slice(0, 10) === value
+  );
 }
 
 /**
