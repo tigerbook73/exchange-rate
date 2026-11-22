@@ -160,6 +160,7 @@ export function RateChart({
   return (
     <div className="relative min-h-0 flex-1">
       <Line
+        className="absolute inset-0 h-full w-full"
         ref={chartRef}
         data={data}
         options={options}

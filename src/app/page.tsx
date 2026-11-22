@@ -64,8 +64,6 @@ export default function Home() {
   const intradayTimes = observations.length
     ? ` ${observations[0].label}–${observations[observations.length - 1].label}`
     : "";
-  const delayed =
-    state?.lastCheckedAt && now - Date.parse(state.lastCheckedAt) >= 3 * 60_000;
 
   return (
     <main className="flex h-full min-h-0 w-full flex-1 flex-col items-center gap-6 overflow-hidden p-6 sm:gap-8 sm:p-8">
@@ -76,8 +74,9 @@ export default function Home() {
             ? "今天无更新"
             : currentRate?.publishedAt &&
                 state?.lastCheckedAt &&
-                Date.parse(currentRate.publishedAt) <
-                  Date.parse(state.lastCheckedAt)
+                Date.parse(state.lastCheckedAt) -
+                  Date.parse(currentRate.publishedAt) >=
+                  5 * 60_000
               ? "当前无更新"
               : null
         }
@@ -85,28 +84,15 @@ export default function Home() {
         onRefresh={refresh}
       />
 
-      {state?.demo ||
-      !online ||
-      delayed ||
-      !state?.lastCheckedAt ||
+      {!online ||
+      (!isLoading && !state?.lastCheckedAt) ||
       (error && !isLoading) ? (
         <div
           className="w-full max-w-md text-sm text-muted-foreground"
           aria-live="polite"
         >
-          {state?.demo ? (
-            <p className="text-amber-700 dark:text-amber-400">
-              本地演示数据，非真实报价
-            </p>
-          ) : null}
-          {!online || delayed || !state?.lastCheckedAt ? (
-            <p>
-              {!online
-                ? "离线 · 显示已缓存数据"
-                : delayed
-                  ? "采集延迟 · 显示最近成功数据"
-                  : "等待服务端数据"}
-            </p>
+          {!online || (!isLoading && !state?.lastCheckedAt) ? (
+            <p>{!online ? "离线 · 显示已缓存数据" : "等待服务端数据"}</p>
           ) : null}
           {error && !isLoading ? (
             <p className="text-destructive" role="alert">

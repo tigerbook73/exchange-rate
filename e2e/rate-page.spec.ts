@@ -161,6 +161,31 @@ test("shows only the observed intraday time range with a prior-close reference",
   await expect(page.locator("canvas")).toBeVisible();
 });
 
+test("shows the current no-update note only after five checked minutes", async ({
+  page,
+}) => {
+  const checkedAt = new Date(`${TODAY}T12:00:00+08:00`);
+  await page.clock.setFixedTime(checkedAt);
+  let revision = 0;
+  await page.route(/\/api\/sync(?:\?.*)?$/, (route) => {
+    const data = payload(
+      ++revision,
+      new URL(route.request().url()).searchParams.has("cursor"),
+    );
+    data.state.lastCheckedAt = checkedAt.toISOString();
+    data.state.lastSuccess!.publishedAt = new Date(
+      checkedAt.getTime() - (revision === 1 ? 299_999 : 300_000),
+    ).toISOString();
+    return route.fulfill({ json: data });
+  });
+  await page.goto("/");
+  await expect(page.getByText("4.7500", { exact: true })).toBeVisible();
+  await expect(page.getByText("当前无更新", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "刷新汇率" }).click();
+  await expect(page.getByText("4.7600", { exact: true })).toBeVisible();
+  await expect(page.getByText("当前无更新", { exact: true })).toBeVisible();
+});
+
 test("preserves existing history ranges", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(String(error)));
@@ -173,6 +198,83 @@ test("preserves existing history ranges", async ({ page }) => {
   }
   expect(errors).toEqual([]);
 });
+
+for (const width of [320, 390, 1280]) {
+  for (const colorScheme of ["light", "dark"] as const) {
+    test(`keeps layout stable through loading and refresh at ${width}px in ${colorScheme}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await page.emulateMedia({ colorScheme });
+      let release!: () => void;
+      const ready = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let revision = 0;
+      await page.route(/\/api\/sync(?:\?.*)?$/, async (route) => {
+        await ready;
+        const data = payload(
+          ++revision,
+          new URL(route.request().url()).searchParams.has("cursor"),
+        );
+        if (revision === 1) {
+          const previousDate = addDays(TODAY, -1);
+          data.state.lastSuccess!.publishedAt = `${previousDate}T22:00:00+08:00`;
+          data.state.lastSuccess!.date = previousDate;
+        }
+        await route.fulfill({ json: data });
+      });
+      await page.goto("/");
+      await expect(
+        page.getByText("暂无本地数据", { exact: true }),
+      ).toBeVisible();
+      // Wait for Chart.js to mount before comparing data-dependent geometry.
+      await expect
+        .poll(() =>
+          page
+            .locator("canvas")
+            .evaluate((el) =>
+              Math.abs(
+                el.getBoundingClientRect().height -
+                  el.parentElement!.getBoundingClientRect().height,
+              ),
+            ),
+        )
+        .toBeLessThan(1);
+      const regions = [
+        page.locator('[data-slot="card"]'),
+        page.locator('[data-slot="card-content"] > div'),
+        page.locator('[data-slot="card-content"] > p').first(),
+        page.getByRole("group", { name: "时间范围" }),
+        page.locator("canvas"),
+        page.getByText("数据来自快易理财网及工商银行网站。仅供参考。"),
+      ];
+      const before = await Promise.all(regions.map((el) => el.boundingBox()));
+      const expectStable = async () => {
+        for (const [index, region] of regions.entries()) {
+          await expect
+            .poll(async () => {
+              const rect = (await region.boundingBox())!;
+              const initial = before[index]!;
+              return Math.max(
+                ...(["x", "y", "width", "height"] as const).map((key) =>
+                  Math.abs(rect[key] - initial[key]),
+                ),
+              );
+            })
+            .toBeLessThan(1);
+        }
+      };
+      release();
+      await expect(page.getByText(/今天无更新/)).toBeVisible();
+      await expectStable();
+      await page.getByRole("button", { name: "刷新汇率" }).click();
+      await expect(page.getByText("4.7600", { exact: true })).toBeVisible();
+      await expect(page.getByText(/今天无更新/)).toHaveCount(0);
+      await expectStable();
+    });
+  }
+}
 
 test("follows system themes on a mobile viewport", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });

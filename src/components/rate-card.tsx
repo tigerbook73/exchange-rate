@@ -34,7 +34,7 @@ export function RateCard({
   onRefresh: () => void;
 }) {
   return (
-    <Card className="w-full max-w-md min-h-[30svh]">
+    <Card className="w-full max-w-md min-h-[30svh] shrink-0">
       <CardHeader>
         <CardTitle className="text-base font-normal text-muted-foreground">
           工商银行 澳元 购汇价（现汇卖出）
@@ -70,7 +70,7 @@ export function RateCard({
             ) : null}
           </span>
         </div>
-        <p className="text-base text-muted-foreground">
+        <p className="min-h-[2lh] text-base text-muted-foreground @min-[19rem]:min-h-lh">
           {rate
             ? rate.publishedAt
               ? `更新于 ${formatUpdatedAt(rate.publishedAt)}`
