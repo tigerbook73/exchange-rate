@@ -54,8 +54,8 @@ export function RateCard({
       </CardHeader>
       <CardContent className="@container flex min-h-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1 items-center gap-3 text-[clamp(2rem,18cqw,3.75rem)]">
-          <p className="font-semibold tabular-nums">
-            {rate ? rate.huiSell.toFixed(4) : "－－－－"}
+          <p className="min-h-lh font-semibold tabular-nums">
+            {rate ? rate.huiSell.toFixed(4) : null}
           </p>
           <span
             className="inline-flex size-[0.8em] shrink-0 text-muted-foreground"
