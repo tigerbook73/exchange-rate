@@ -5,6 +5,10 @@ import {
   type SyncResponse,
 } from "../src/lib/contracts/server-types";
 
+// Keep API mocks authoritative even against production builds. Real SW
+// control and offline navigation are exercised separately in pwa.spec.ts.
+test.use({ serviceWorkers: "block" });
+
 const TODAY = getBeijingDateString();
 const datasetId = "a".repeat(32);
 function payload(revision = 1, incremental = false): SyncResponse {
@@ -274,6 +278,45 @@ for (const width of [320, 390, 1280]) {
       await expectStable();
     });
   }
+}
+
+for (const colorScheme of ["light", "dark"] as const) {
+  test(`paints ${colorScheme} background before application resources load`, async ({
+    page,
+  }, testInfo) => {
+    await page.emulateMedia({ colorScheme });
+    let release = () => {};
+    const resourcesReady = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(
+      /\/(?:src\/main\.tsx|assets\/[^/]+\.(?:js|css))(?:\?.*)?$/,
+      async (route) => {
+        await resourcesReady;
+        await route.continue();
+      },
+    );
+    try {
+      await page.goto("/", { waitUntil: "commit" });
+      await expect(page.locator("#root")).toBeAttached();
+      // No React or application CSS has arrived yet: this covers the initial canvas, not just the eventual theme.
+      await expect(page.locator("html")).toHaveCSS(
+        "background-color",
+        colorScheme === "dark" ? "rgb(10, 10, 10)" : "rgb(255, 255, 255)",
+      );
+      await expect(page.locator("html")).toHaveCSS("color-scheme", colorScheme);
+    } finally {
+      release();
+    }
+    await expect(page.getByText("4.7500", { exact: true })).toBeVisible();
+    await expect(page.locator("html")).toHaveCSS("color-scheme", colorScheme);
+    await page.screenshot({
+      path: testInfo.outputPath(`loaded-${colorScheme}.png`),
+    });
+    await page.reload();
+    await expect(page.getByText("4.7500", { exact: true })).toBeVisible();
+    await expect(page.locator("html")).toHaveCSS("color-scheme", colorScheme);
+  });
 }
 
 test("follows system themes on a mobile viewport", async ({ page }) => {

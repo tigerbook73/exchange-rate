@@ -140,6 +140,7 @@ D1 migrations 位于 `migrations/`：
 - 浏览器、网站 Worker、SW、collector 及 Node 工具 / 测试分别检查类型。binding 类型由 Wrangler 生成，SW 使用独立 WebWorker 类型环境。
 - `vite build` 生成前端与网站 Worker，Serwist 注入预缓存；网站构建不抓源站、不操作生产 D1。生产查询仅依赖 DB / ASSETS，旧框架 R2 不再使用。
 - 系统主题由 next-themes 跟随，保留 `defaultTheme="system"` 与 `enableSystem`，不提供手动切换；浏览器亮暗主题色由 `index.html` 的媒体查询 meta 设置，manifest 只有静态色。
+- `index.html` 在应用资源加载前初始化主题 class 和页面底色，避免暗色刷新时先白后黑；存储不可用时仍按系统主题初始化。
 - 同步时保留结构和值；flex 容器作为 flex 子项时使用 min-h-0；Chart.js 旁不条件渲染占空间的说明，返回前台主动 resize。
 - Vitest 使用本地 fixture 与隔离 D1；Chromium E2E mock API；真实生产预览另验 SW 安装、离线重载和旧版升级。检查命令见 README，按变更范围选择验收见阶段工作流。
 - 远程结构检查只在显式操作 / 部署前进行。发布、回退与持续观察的实际状态不写入架构契约，统一见运行记录。
