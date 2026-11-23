@@ -6,8 +6,8 @@
 
 - [技术方案](docs/blueprint.md)
 - [开发约束](AGENTS.md)
-- [阶段计划与验收](docs/plans/phase-1-cloudflare-server-rates.md)
-- [当前实现进度](docs/progress/cloudflare-server-rates.md)
+- [重构计划与验收](docs/plans/vite-react-workers-migration.md)
+- [当前实现进度](docs/progress/vite-react-workers-migration.md)
 
 ## 本地检查
 
@@ -117,9 +117,9 @@ Cloudflare Workers Builds 只在网站 Worker `icbc-rate` 上配置一条生产�
 
 Build command 可选，Deploy command 支持包管理器脚本，见 [Cloudflare 配置说明](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/)。
 
-本次部署验证、回退版本及仍需观察的 Cron CPU、D1/R2 用量和缓存命中见[进度文件](docs/progress/cloudflare-server-rates.md)。短时成功不等于完成两周稳定性观察。
+本次部署验证、回退版本及仍需观察的 Cron CPU、D1/R2 用量和缓存命中见[进度文件](docs/progress/vite-react-workers-migration.md)。短时成功不等于完成两周稳定性观察。
 
-官方现价 API 和部署前历史同步已于 2026-11-22 发布；版本、验收与运行观察见[进度文件](docs/progress/cloudflare-server-rates.md)。
+官方现价 API 和部署前历史同步已于 2026-11-22 发布；版本、验收与运行观察见[进度文件](docs/progress/vite-react-workers-migration.md)。
 
 ## 版本升级
 
