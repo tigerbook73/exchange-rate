@@ -1,5 +1,5 @@
-// Shapes returned by our own /api/today and /api/history route handlers
-// (see docs/blueprint.md §6).
+// Shapes returned by our own /api/today and /api/history query APIs
+// (see docs/blueprint.md §7).
 
 export interface TodayResponse {
   bank: string;

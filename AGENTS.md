@@ -4,7 +4,7 @@
 
 - [技术方案](docs/blueprint.md)是领域规则、数据和 API 契约的主要说明位置；修改业务前阅读相关章节并核对实现。
 - [README](README.md)维护操作命令，[阶段工作流](docs/phase-workflow.md)维护执行与验收规则。
-- 正在按[重构计划](docs/plans/vite-react-workers-migration.md)迁移至 Vite + React + Workers；状态见[进展](docs/progress/vite-react-workers-migration.md)。未完成替换前，Next.js + OpenNext 仍是当前实现，不迁移 vinext。
+- 当前架构为 Vite + React + Cloudflare Workers；运行与发布状态见[运行记录](docs/operations.md)。
 
 ## 不可破坏的边界
 
@@ -23,12 +23,11 @@
 - binding 类型从 Wrangler 配置生成；浏览器、SW、网站 Worker、collector、Node 脚本区分环境，不手写复制 Env。
 - 只跟随系统亮暗主题。同步中保留已有值和结构，使用行内提示；图表返回前台主动 resize。
 - 同时为 flex 子元素与容器时默认加 min-h-0；Chart.js 旁不条件添加占布局空间的 flex 说明，避免画布抖动。
-- 新依赖选适配的稳定版；有兼容性原因保留旧版时注明。不要在迁移中顺便扩展业务或重做交互。
+- 新依赖选适配的稳定版；有兼容性原因保留旧版时注明。变更保持既定范围，不顺便扩展业务或重做交互。
 
-## 当前 Next.js 约束（替换完成后删除）
+## 构建与运行环境
 
-- 写 Next.js 代码前阅读 `node_modules/next/dist/docs/` 的对应版本指南，注意异步 API 和弃用说明。
-- Serwist 使用 @serwist/next；dev / build 必须保留 --webpack，不能仅靠 disable 消除 Turbopack 冲突。
-- Cloudflare 本地上下文仅开发阶段初始化；完整 OpenNext 构建用于平台验证，标准 Next 构建不等于部署验证。
-- viewport.themeColor 定义亮暗浏览器主题色，manifest 仅静态主题色；布局约束见技术方案。
-- SW 与 collector 使用独立 tsconfig；根 tsconfig 排除两者。当前全部检查命令见 README。
+- 使用 Cloudflare Vite 插件运行网站，Wrangler 配置是 binding 与生产目标的主要来源。Collector 独立构建，网站发布子进程的 CI 覆盖变量不得污染 collector。
+- SW 使用 @serwist/vite；保持 /sw.js 和 scope 稳定，复用 defaultCache，预缓存排除 /_headers 与 /_redirects。开发模式不注册，生产预览验证升级与离线。
+- 浏览器主题色在 index.html 按系统主题定义，manifest 只设静态主题色。字体自托管，不依赖运行时外部字体请求。
+- 测试不请求源站；页面回归用 Chromium 和 API mock，SW 另验生产接管。变更范围对应的验证要求见阶段工作流。

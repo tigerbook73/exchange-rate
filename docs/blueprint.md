@@ -1,6 +1,6 @@
 # 工商银行澳币汇率 PWA — 技术方案
 
-本文件描述当前本地实现。无租约采集及部署前兼容检查尚未发布，线上状态以进度文件中的最后发布记录为依据，未重新核验。服务端采集、官方现价 API 与部署前历史同步基线已于 2026-11-22 部署至 Cloudflare：网站 `icbc-rate`、采集 `icbc-rate-collector`、D1 `icbc-rate`，正式入口为 https://icbc-rate.tigerbook.top 。实时验证及仍需观察的额度、缓存效果见 [进度](progress/vite-react-workers-migration.md)，操作见 [README](../README.md)。
+本文件描述当前实现和稳定业务契约。运行状态、发布版本及待办见[运行记录](operations.md)，操作见 [README](../README.md)。
 
 ## 1. 架构
 
@@ -8,17 +8,16 @@
 每分钟 Cron → 独立采集 Worker → 工商银行 JSON API → 校验 → D1
 部署前 Node.js → 快易理财历史页 → 历史校准 → D1
                                                         ↑
-浏览器 / PWA → Next.js + OpenNext 网站 Worker → 只读查询 ┘
+浏览器 / PWA → 原生网站 Worker + 静态资源 → 只读查询 ┘
     ├─ IndexedDB：每日历史、固定点、一个临时点、同步游标
     └─ Serwist：静态资源与离线响应缓存
 
-OpenNext R2 增量缓存：仅用于框架缓存，不作业务历史存储
 ```
 
-- 仅 Cloudflare 部署，不再维护 Vercel 部署兼容性。保留 Next.js 16、OpenNext、webpack、Serwist、Chart.js 与 Base UI。
+- Vite + React SPA 与只读 API 同源部署到 Cloudflare Workers；Static Assets 提供前端，`/api` 与 `/api/*` 优先进入原生 Worker。未知 API 返回 JSON 404，不进入 SPA 回退。只支持 GET 的 API 对其他方法返回 405。
 - 网站请求、缓存失效和空库不会触发源站抓取。未初始化时 `/api/sync` 返回 503，客户端保留本地数据。
 - 服务端是业务数据权威；客户端是可重建的离线副本，不上传报价。
-- 本地通过显式命令初始化 / 采集；`collector:local` 每分钟运行同一采集逻辑。真实云端由独立 Worker 的 `scheduled()` 执行。采集 Worker 只用原生 Web API，不启用 `nodejs_compat`；网站 Worker 继续保留 OpenNext 所需兼容层。
+- 本地通过显式命令初始化 / 采集；`collector:local` 每分钟运行同一采集逻辑。真实云端由独立 Worker 的 `scheduled()` 执行。采集 Worker 只用原生 Web API，不启用 `nodejs_compat`；网站 Worker 也不启用 `nodejs_compat`；历史校准和管理脚本单独在 Node.js 运行。
 
 ## 2. 数据源和解析
 
@@ -77,7 +76,7 @@ D1 migrations 位于 `migrations/`：
 ## 6. 每日历史校准
 
 - 使用独立历史游标，不从当天采样最大日期推算。起点为最后确认历史日期本身与最早未校准暂定日期中的较早者；初始化默认为今天前 365 天。
-- 通过 `pnpm run deploy` / `pnpm run deploy:collector` 在发布前由本机 / CI 的 Node.js 执行；不在 Next 构建中抓取、不占 Cron Worker CPU。提交冲突有限重试，未成功更新或历史源失败则停止发布。日常 Cron 不再触发历史校准；长期不部署的历史漏采 / 修正留待下次部署或显式回填。
+- 通过 `pnpm run deploy` / `pnpm run deploy:collector` 在发布前由本机 / CI 的 Node.js 执行；不在通用构建中抓取、不占 Cron Worker CPU。提交冲突有限重试，未成功更新或历史源失败则停止发布。日常 Cron 不再触发历史校准；长期不部署的历史漏采 / 修正留待下次部署或显式回填。
 - 过滤 history 中今天及未来记录，当天只信真实采集源。每日暂定值独立保存，随后由历史真实值确认。
 - 缺日范围扩展至北京时间昨天，不再受历史源返回的最后日期限制，不硬编码周末。引用此前最近的真实 / 暂定日期，标记 `source: "carried-forward"` 与 `carriedFromDate`，不连续沿用填补记录、不向前倒填、不补今天。标记仅表示沿用已知报价，不能据此认定源站当天未发布报价。
 - 每日首次成功提交的分钟批次中补齐尾部缺日，即使本次源站失败或仍返回旧日报价也执行。`dailyFilledThrough` 与实体共用 revision / write_id 原子提交；冲突或回滚不推进标记，下一轮重试。当天后续轮次不重复补缺。最近真实日记录按需合入原有状态 SELECT，不增加 D1 往返。
@@ -104,12 +103,12 @@ D1 migrations 位于 `migrations/`：
 
 ## 8. 缓存、新鲜度与离线
 
-- 查询目标共享缓存 15 秒，并允许最多额外 15 秒陈旧响应；带完整游标的 URL 必须参与缓存键。动态 Route Handler 不凭 `revalidate` 声称已获得 ISR；线上命中仍待验证。
+- 查询目标共享缓存 15 秒，并允许最多额外 15 秒陈旧响应；带完整游标的 URL 必须参与缓存键。原生 Worker 保留该响应策略，不能仅凭响应头认定实际 CDN 命中。
 - IndexedDB `fx-cache` 升级为 v2：保留旧 `rates`，新增 `points` 和 `server` 元数据；旧版缓存先展示，成功快照后按权威窗口替换。
 - 单次增量、保留边界与新游标在一个 IndexedDB 事务中提交。拒绝旧版本、同版本更旧快照或不同数据集的 delta；失败保留原游标及离线数据。
 - 页面可见且在线时每 60 秒同步；打开、返回前台、恢复网络和手动刷新立即尝试；同一时间只运行一次。隐藏和离线不轮询。
 - 服务端过期不主动擦除离线设备；成功联网同步后才清理本地三日前固定点，每日历史不随之删除。
-- PWA 使用 `@serwist/next` 和 `defaultCache`。`/_headers`、`/_redirects` 是 Cloudflare 配置文件，排除预缓存；否则 404 会中止 SW 安装。
+- PWA 使用 `@serwist/vite` 和其 `defaultCache`。`/_headers`、`/_redirects` 是 Cloudflare 配置文件，排除预缓存；否则 404 会中止 SW 安装。
 - `defaultCache` 同源 API 为 NetworkFirst。离线缓存响应也可能 HTTP 200，不能据此认定刚联网；UI 显示来源日期、离线或同步错误，不将缓存响应误认作新报价。
 - SW 在开发模式禁用。离线重载用生产本地预览验证：先在线加载、确认接管、在线重载一次，再断网重载。首次从未在线加载的设备不保证可离线使用。
 
@@ -134,10 +133,13 @@ D1 migrations 位于 `migrations/`：
 - 系统亮暗主题、同步时保留卡片结构和已有价格，在数字后以接近数字高度的旋转图标表示刷新，不在更新时间后显示加载文字、手机返回前台的主动画布 resize 均保留。
 - 演示库拒绝混入真实采集；页面不额外显示演示提示，本地操作责任见 README。
 
-## 10. 构建、测试与待验证项
+## 10. 模块边界与构建
 
-- `dev` / `build` 保留 `--webpack`。Cloudflare 本地上下文只在开发阶段初始化，生产构建不启动本地 Wrangler。
-- SW 和采集 Worker 独立 tsconfig；通过配置生成两套 binding 类型，不手写复制 Env。
-- Vitest 覆盖日期、解析、固定 / 临时点、回退、事务、重复 / 迟到批次、部署前兼容检查、游标、清理和本地缓存。D1 集成测试使用真实本地模拟器及 HTML fixture。
-- Playwright 用例 mock 查询 API，验证主题、历史范围、增量刷新、唤醒合并、前台轮询、旧缓存迁移与离线保留。生产 SW 验收单独检查受控后的导航缓存和断网重载。
-- 生产采集与接口曾完成验证，但长期 CPU / D1 / R2 额度、CDN 命中和采集窗口观察未验收。当前保持全天采集，不硬编码周末休市。实际发布版本、回退依据及待办见进展。
+- `src/lib/domain` 保存纯业务规则与展示计算，`contracts` 保存共享类型及 API 协议；两者不依赖客户端、服务端或框架适配。
+- `src/lib/client` 保存 IndexedDB、同步与 hooks；`server` 保存 D1、采集、历史校准及 API。`worker/index.ts` 路由查询，`collector/index.ts` 只负责定时入口。前端不导入服务端实现；Cron 不导入历史 HTML 解析。
+- 浏览器、网站 Worker、SW、collector 及 Node 工具 / 测试分别检查类型。binding 类型由 Wrangler 生成，SW 使用独立 WebWorker 类型环境。
+- `vite build` 生成前端与网站 Worker，Serwist 注入预缓存；网站构建不抓源站、不操作生产 D1。生产查询仅依赖 DB / ASSETS，旧框架 R2 不再使用。
+- 系统主题由 next-themes 跟随，保留 `defaultTheme="system"` 与 `enableSystem`，不提供手动切换；浏览器亮暗主题色由 `index.html` 的媒体查询 meta 设置，manifest 只有静态色。
+- 同步时保留结构和值；flex 容器作为 flex 子项时使用 min-h-0；Chart.js 旁不条件渲染占空间的说明，返回前台主动 resize。
+- Vitest 使用本地 fixture 与隔离 D1；Chromium E2E mock API；真实生产预览另验 SW 安装、离线重载和旧版升级。检查命令见 README，按变更范围选择验收见阶段工作流。
+- 远程结构检查只在显式操作 / 部署前进行。发布、回退与持续观察的实际状态不写入架构契约，统一见运行记录。

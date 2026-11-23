@@ -5,8 +5,8 @@ import { getAllRates, upsertRates, type RatesDb } from "./rates-db";
 
 /**
  * Merges /api/today and /api/history into RateRecord[]. Today's row is only
- * ever taken from /api/today — /api/history is cached for up to an hour, so
- * its copy of today's row can be stale; if /api/today fails, today simply
+ * ever taken from /api/today; historical responses must not replace the
+ * current day's observed quote. If /api/today fails, today simply
  * stays whatever was already in IndexedDB (or absent) rather than falling
  * back to that stale value.
  */
