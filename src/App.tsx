@@ -123,7 +123,25 @@ export default function Home() {
       <InstallButton />
 
       <p className="w-full max-w-md text-left text-sm text-muted-foreground">
-        数据来自快易理财网及工商银行网站。仅供参考。
+        数据来自
+        <a
+          href="https://www.kylc.com/huilv/d-icbc-aud.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline decoration-muted-foreground/50 underline-offset-2 hover:text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          快易理财网
+        </a>
+        及
+        <a
+          href="https://www.icbc.com.cn/forex/foreignEx/forex.html"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline decoration-muted-foreground/50 underline-offset-2 hover:text-foreground focus-visible:rounded-sm focus-visible:outline-2 focus-visible:outline-ring"
+        >
+          工商银行网站
+        </a>
+        。仅供参考。
       </p>
     </main>
   );

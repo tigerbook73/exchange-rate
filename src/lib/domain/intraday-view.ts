@@ -1,4 +1,4 @@
-import { addDays, getBeijingDateString } from "./date";
+import { getBeijingDateString } from "./date";
 import { dayStart } from "./intraday";
 import type { ChartPoint } from "./rate-view";
 import type { RateRecord } from "../contracts/rate-types";
@@ -132,7 +132,7 @@ export function intradaySeries(
   // same-day observation. It is derived for display and is not persisted.
   const reference: ChartPoint = {
     date: `reference:${previous.date}:start`,
-    label: previous.date === addDays(date, -1) ? "前日末值" : "前次末值",
+    label: "昨天",
     huiSell: previous.huiSell,
     isCarriedForward: true,
     isReference: true,

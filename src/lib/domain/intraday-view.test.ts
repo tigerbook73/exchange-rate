@@ -129,7 +129,7 @@ describe("intraday visible time range", () => {
     const series = intradaySeries([original], null, date, at("12:00"), records);
     expect(series).toHaveLength(3);
     expect(series.slice(0, 2).map((p) => p.huiSell)).toEqual([4.7, 4.7]);
-    expect(series[0]).toMatchObject({ isReference: true, label: "前日末值" });
+    expect(series[0]).toMatchObject({ isReference: true, label: "昨天" });
     expect(series[0].note).toContain("2026-11-21 22:00");
     expect(series[0].note).toContain("非当日采样");
     expect(series[2]).toMatchObject({
@@ -169,7 +169,7 @@ describe("intraday visible time range", () => {
       at("12:00"),
       records,
     );
-    expect(series[0]).toMatchObject({ label: "前次末值", huiSell: 4.7 });
+    expect(series[0]).toMatchObject({ label: "昨天", huiSell: 4.7 });
     expect(series[0].note).toContain("2026-11-20");
     expect(intradaySeries([], null, date, at("12:00"), records)).toEqual([]);
   });

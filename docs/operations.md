@@ -7,9 +7,9 @@
 | 项目       | 状态                                                                                                       |
 | ---------- | ---------------------------------------------------------------------------------------------------------- |
 | 正式入口   | https://icbc-rate.tigerbook.top                                                                            |
-| 网站       | `icbc-rate`，Vite + React + 原生 Worker，版本 `79ba5a65-f1dd-4ecb-8088-6c27e0213ff4`                       |
-| 采集       | `icbc-rate-collector`，版本 `4b62a80d-045d-434e-8674-e9e16c09f834`，每分钟 Cron                            |
-| 实现提交   | main 已推送至 `f1adfa3`；主题闪白修复已手动部署并保存本地提交，尚未推送                                    |
+| 网站       | `icbc-rate`，Vite + React + 原生 Worker，版本 `932b169d-44bd-498d-9aca-af020c1d4d1f`                       |
+| 采集       | `icbc-rate-collector`，版本 `d6056f8c-7739-4983-8640-55de9a61e90a`，每分钟 Cron                            |
+| 实现提交   | main 已推送至 `f1adfa3`；主题闪白修复（`716b76d`）与标签 / 链接小改已手动部署并分别本地提交，尚未推送      |
 | D1         | `icbc-rate` / `d6a2a857-d667-4344-a049-ee4457ddb4ee`；migration 0001–0005 已应用，本次无待执行 migration   |
 | 数据兼容   | schema 1，datasetId `150f265f977693ec8da3ef1a0a192959` 保持不变；367 条服务端每日数据，API 默认窗口 366 条 |
 | 资源边界   | 网站实际绑定仅 ASSETS / DB，collector 仅 DB；两者实际生产 D1 ID 已通过 REST 核对                           |
@@ -19,6 +19,7 @@
 
 ## 已验证与证据
 
+- 标签与来源链接：分时参考标签统一为“昨天”，实际来源日期仍在 tooltip；页脚两个来源名称增加对应网页链接，继承亮暗主题文字颜色并加下划线。10 项相关单测、本地 9 项页面检查通过；亮暗截图与链接样式已检查。
 - 刷新主题修复：HTML 在应用 JS/CSS 到达前初始化主题及底色；本地生产预览 28 项页面 / PWA 用例通过，正式站的亮暗资源延迟、刷新主题及真实 SW 离线重载 4 项检查通过。页面 API mock 用例阻止 SW 接管，真实 SW 单独验证。
 - 本地：格式、lint、浏览器 / 网站 / SW / collector / Node 工具及测试类型通过；91 项 Vitest（含隔离 D1）、27 项 Chromium 页面回归、生产 PWA 接管及离线重载通过；两个 Worker 打包通过。
 - 升级：本地旧 Next PWA → Vite、Vite → Vite 更新均保留 IndexedDB / 游标并离线重载。正式站也使用发布前建立的持久浏览器状态验证真实旧版升级：datasetId 和 schema 不变，366 条本地每日数据保留，离线整页重载通过，页面错误 0；亮暗移动截图已检查。
@@ -29,12 +30,12 @@
 
 ## 回退依据
 
-主题修复前已确认的版本：网站 `e79b875f-75a5-49e4-a938-5b253eabfc9e`，collector `2c9b8e70-408d-447c-81b2-912bf10123cc`。本次无数据库结构变更、清库或 schema 升级，回退前仍须确认这些版本可用及旧资源存在。
+标签 / 链接小改前的主题修复版：网站 `79ba5a65-f1dd-4ecb-8088-6c27e0213ff4`，collector `4b62a80d-045d-434e-8674-e9e16c09f834`。本次无数据库结构变更、清库或 schema 升级，回退前仍须确认这些版本可用及旧资源存在。
 
 ```bash
 # 需要回退时显式执行；两者可分别操作，不自动回滚 D1
-pnpm exec wrangler rollback e79b875f-75a5-49e4-a938-5b253eabfc9e --name icbc-rate
-pnpm exec wrangler rollback 2c9b8e70-408d-447c-81b2-912bf10123cc --config collector/wrangler.jsonc
+pnpm exec wrangler rollback 79ba5a65-f1dd-4ecb-8088-6c27e0213ff4 --name icbc-rate
+pnpm exec wrangler rollback 4b62a80d-045d-434e-8674-e9e16c09f834 --config collector/wrangler.jsonc
 ```
 
 生产 D1 切换前备份 `.wrangler/backups/2026-11-23-before-vite.sql`（约 409KiB）；旧备份 `.wrangler/backups/2026-11-22-before-icbc-api.sql`、`.wrangler/backups/2026-11-22-initial-production.sql` 也保留。恢复属于显式操作，不自动导入生产；回滚代码不等于回滚数据，PWA 客户端已缓存资源也需单独验收。
