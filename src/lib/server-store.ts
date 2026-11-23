@@ -15,6 +15,7 @@ interface MetaRow {
   revision: number;
   cursor_floor: number;
   state_json: string;
+  gap_source_json?: string | null;
 }
 interface SnapshotRow extends MetaRow {
   daily_json: string;
@@ -23,15 +24,26 @@ interface SnapshotRow extends MetaRow {
 }
 export class ResetRequired extends Error {}
 
-export async function readMeta(db: D1Database) {
-  const row = await db
-    .prepare(
-      "SELECT schema_version, dataset_id, revision, cursor_floor, state_json FROM collection_state WHERE id = 1",
-    )
-    .first<MetaRow>();
+export async function readMeta(db: D1Database, fillThrough?: string) {
+  // Read the tail's real anchor only when a new Beijing day needs maintenance,
+  // in the same snapshot and round trip as the collection state.
+  const gapSource = fillThrough
+    ? `, CASE WHEN COALESCE(json_extract(state_json, '$.dailyFilledThrough'), '') < ?
+       THEN (SELECT value_json FROM daily_rates WHERE date <= ?
+         AND json_extract(value_json, '$.source') != 'carried-forward'
+         ORDER BY date DESC LIMIT 1) END AS gap_source_json`
+    : "";
+  let query = db.prepare(
+    `SELECT schema_version, dataset_id, revision, cursor_floor, state_json${gapSource} FROM collection_state WHERE id = 1`,
+  );
+  if (fillThrough) query = query.bind(fillThrough, fillThrough);
+  const row = await query.first<MetaRow>();
   if (!row) throw new Error("Database not initialized");
   return {
     ...row,
+    gapSource: row.gap_source_json
+      ? (JSON.parse(row.gap_source_json) as RateRecord)
+      : null,
     state: {
       ...emptyCollectionState(),
       ...JSON.parse(row.state_json),
@@ -109,7 +121,7 @@ export async function commitCollection(
   points: IntradayPoint[],
   daily: RateRecord[],
   now: number,
-  task: "minute" | "history" | "demo" = "minute",
+  task: "minute" | "history" | "demo" | "repair" = "minute",
 ) {
   const revision = expectedRevision + 1;
   // A write marker fences this atomic batch without a lock, lease or release.
@@ -150,7 +162,11 @@ export async function commitCollection(
         .prepare(
           `INSERT INTO daily_rates (date, value_json, revision)
     SELECT json_extract(value, '$.date'), value, ? FROM json_each(?) WHERE ${guard}
-    ON CONFLICT(date) DO UPDATE SET value_json = excluded.value_json, revision = excluded.revision`,
+    ON CONFLICT(date) DO UPDATE SET value_json = excluded.value_json, revision = excluded.revision
+    WHERE json_extract(excluded.value_json, '$.source') != 'carried-forward'
+       OR (json_extract(daily_rates.value_json, '$.source') = 'carried-forward'
+           AND (json_extract(daily_rates.value_json, '$.huiSell') != json_extract(excluded.value_json, '$.huiSell')
+             OR json_extract(daily_rates.value_json, '$.carriedFromDate') IS NOT json_extract(excluded.value_json, '$.carriedFromDate')))`,
         )
         .bind(revision, JSON.stringify(daily), token, revision),
     );
@@ -159,9 +175,9 @@ export async function commitCollection(
       db
         .prepare(
           `INSERT INTO sync_changes (revision, entity, entity_key, created_at)
-    SELECT ?, 'daily', json_extract(value, '$.date'), ? FROM json_each(?) WHERE ${guard}`,
+    SELECT ?, 'daily', date, ? FROM daily_rates WHERE revision = ? AND ${guard}`,
         )
-        .bind(revision, now, JSON.stringify(daily), token, revision),
+        .bind(revision, now, revision, token, revision),
     );
   commands.push(
     db

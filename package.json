@@ -26,6 +26,8 @@
     "db:demo": "node scripts/local-data.mjs demo",
     "db:collect": "node scripts/local-data.mjs collect",
     "db:backfill": "node scripts/local-data.mjs backfill",
+    "db:repair-gaps": "node scripts/local-data.mjs repair-gaps",
+    "db:repair-gaps:remote": "node scripts/production-data.mjs repair-gaps --remote",
     "db:reset": "node scripts/local-data.mjs reset",
     "db:check": "node scripts/local-data.mjs check",
     "db:check:remote": "node scripts/production-data.mjs check --remote",

@@ -20,6 +20,8 @@ import {
 } from "./server-store";
 import { advanceCollection } from "./intraday";
 import { emptyCollectionState } from "./server-types";
+import type { RateRecord } from "./rates-db";
+import { repairDailyGaps } from "./daily-gap-repair";
 import { checkDatabaseCompatibility, DatabaseSchemaError } from "./db-schema";
 
 const runtime = vi.hoisted(() => ({ db: null as D1Database | null }));
@@ -50,6 +52,26 @@ import { GET as getHistory } from "../app/api/history/route";
 let proxy: Awaited<ReturnType<typeof getPlatformProxy<CloudflareEnv>>>;
 let db: D1Database;
 const now = Date.parse("2026-11-22T10:05:05+08:00");
+function realDaily(date: string, huiSell = 4.4331): RateRecord {
+  return {
+    date,
+    huiSell,
+    publishedAt: null,
+    source: "history",
+    carriedFromDate: null,
+  };
+}
+async function seedDaily(records: RateRecord[]) {
+  await commitCollection(
+    db,
+    0,
+    { ...emptyCollectionState(), historyDate: "2026-11-21" },
+    [],
+    records,
+    now,
+    "history",
+  );
+}
 async function write() {
   const sample = {
     minute: now - 5000,
@@ -102,6 +124,247 @@ afterAll(async () => {
 });
 
 describe("D1 persistence and read-only API", () => {
+  it("fills yesterday at Beijing midnight even when collection fails, without extra round trips", async () => {
+    await seedDaily([realDaily("2026-11-21")]);
+    const at = Date.parse("2026-11-23T00:00:05+08:00");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(at);
+    const before = await readSync(db, null, at);
+    const reads: string[] = [];
+    const batches: number[] = [];
+    const tracked = new Proxy(db, {
+      get(target, key, receiver) {
+        if (key === "prepare")
+          return (sql: string) => {
+            reads.push(sql);
+            return target.prepare(sql);
+          };
+        if (key === "batch")
+          return (commands: D1PreparedStatement[]) => {
+            batches.push(commands.length);
+            return target.batch(commands);
+          };
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    try {
+      const fail = async () => {
+        throw new Error("offline upstream");
+      };
+      await collectMinute(tracked, fail);
+      const delta = await readSync(db, before.cursor, at);
+      expect(delta.daily).toEqual([
+        {
+          ...realDaily("2026-11-22"),
+          source: "carried-forward",
+          carriedFromDate: "2026-11-21",
+        },
+      ]);
+      expect(delta.state.dailyFilledThrough).toBe("2026-11-22");
+      expect(delta.state.lastError).toBe("source-unavailable-or-invalid");
+      expect(delta.state.historyDate).toBe("2026-11-21");
+      expect(reads.filter((sql) => sql.startsWith("SELECT"))).toHaveLength(1);
+      // 00:00 also performs the existing quarter-hour cleanup batch.
+      expect(batches).toHaveLength(2);
+      clock.mockReturnValue(at + 60_000);
+      await collectMinute(db, fail);
+      expect((await readSync(db, delta.cursor, at + 60_000)).daily).toEqual([]);
+      clock.mockReturnValue(at + 86400_000);
+      await collectMinute(db, fail);
+      expect(
+        (await readSync(db, null, at + 86400_000)).daily.find(
+          (r) => r.date === "2026-11-23",
+        ),
+      ).toMatchObject({
+        huiSell: 4.4331,
+        source: "carried-forward",
+        carriedFromDate: "2026-11-21",
+      });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("fills completed dates while the source is still publishing an older date", async () => {
+    await seedDaily([realDaily("2026-11-20")]);
+    const at = Date.parse("2026-11-23T10:01:05+08:00");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(at);
+    try {
+      await collectMinute(db, async () => ({
+        date: "2026-11-20",
+        publishedAt: "2026-11-20T12:00:00+08:00",
+        priceUnits: 44331,
+      }));
+      const result = await readSync(db, null, at);
+      expect(result.daily.map((r) => r.date)).toEqual([
+        "2026-11-20",
+        "2026-11-21",
+        "2026-11-22",
+      ]);
+      expect(
+        result.daily.slice(1).every((r) => r.carriedFromDate === "2026-11-20"),
+      ).toBe(true);
+      expect(result.state.lastSuccess?.date).toBe("2026-11-20");
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("commits the new day's quote and preceding fills in the same revision", async () => {
+    await seedDaily([realDaily("2026-11-21")]);
+    const at = Date.parse("2026-11-23T10:01:05+08:00");
+    const clock = vi.spyOn(Date, "now").mockReturnValue(at);
+    try {
+      const previous = await readSync(db, null, at);
+      await collectMinute(db, async () => ({
+        date: "2026-11-23",
+        publishedAt: "2026-11-23T10:01:00+08:00",
+        priceUnits: 44460,
+      }));
+      const delta = await readSync(db, previous.cursor, at);
+      expect(delta.daily.map((r) => [r.date, r.source])).toEqual([
+        ["2026-11-22", "carried-forward"],
+        ["2026-11-23", "today"],
+      ]);
+      const revisions = await db
+        .prepare(
+          "SELECT DISTINCT revision FROM daily_rates WHERE date >= '2026-11-22'",
+        )
+        .all<{ revision: number }>();
+      expect(revisions.results).toEqual([{ revision: delta.revision }]);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("explicitly repairs old internal and trailing gaps without upstream requests or cursor changes", async () => {
+    const today = {
+      ...realDaily("2026-11-23", 4.446),
+      source: "today" as const,
+    };
+    await seedDaily([
+      realDaily("2026-11-19", 4.5),
+      realDaily("2026-11-21"),
+      today,
+    ]);
+    const at = Date.parse("2026-11-23T10:01:05+08:00");
+    const before = await readSync(db, null, at);
+    expect(await repairDailyGaps(db, at)).toBe(true);
+    const delta = await readSync(db, before.cursor, at);
+    expect(delta.daily.map((r) => [r.date, r.carriedFromDate])).toEqual([
+      ["2026-11-20", "2026-11-19"],
+      ["2026-11-22", "2026-11-21"],
+    ]);
+    expect(delta.state.historyDate).toBe(before.state.historyDate);
+    expect(
+      (await readSync(db, null, at)).daily.find((r) => r.date === today.date),
+    ).toEqual(today);
+    expect(await repairDailyGaps(db, at)).toBe(true);
+    expect((await readMeta(db)).revision).toBe(delta.revision);
+    expect(fetchSourceHtml).not.toHaveBeenCalled();
+    expect(fetchIcbcToday).not.toHaveBeenCalled();
+  });
+
+  it("historical corrections replace carried values and update their downstream fills", async () => {
+    await seedDaily([
+      realDaily("2026-11-20"),
+      { ...realDaily("2026-11-23", 4.446), source: "today" },
+    ]);
+    const at = Date.parse("2026-11-24T10:01:05+08:00");
+    await repairDailyGaps(db, at);
+    const before = await readSync(db, null, at);
+    const clock = vi.spyOn(Date, "now").mockReturnValue(at);
+    try {
+      await collectHistory(
+        db,
+        async () =>
+          '<table class="bank_huilv_table text-nowrap"><tr><td>2026-11-21</td><td><span class="td_rate">4.5</span></td></tr><tr><td>2026-11-24</td><td><span class="td_rate">9</span></td></tr></table>',
+      );
+      const delta = await readSync(db, before.cursor, at);
+      expect(
+        delta.daily.map((r) => [
+          r.date,
+          r.huiSell,
+          r.source,
+          r.carriedFromDate,
+        ]),
+      ).toEqual([
+        ["2026-11-21", 4.5, "history", null],
+        ["2026-11-22", 4.5, "carried-forward", "2026-11-21"],
+      ]);
+      const snapshot = await readSync(db, null, at);
+      expect(snapshot.daily.find((r) => r.date === "2026-11-23")?.huiSell).toBe(
+        4.446,
+      );
+      expect(snapshot.daily.some((r) => r.date === "2026-11-24")).toBe(false);
+      expect(snapshot.state.historyDate).toBe("2026-11-21");
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it("never replaces a stored real quote with a carried value or emits a false daily change", async () => {
+    await seedDaily([realDaily("2026-11-21", 4.5)]);
+    const before = await readSync(db, null, now);
+    const meta = await readMeta(db);
+    await commitCollection(
+      db,
+      meta.revision,
+      meta.state,
+      [],
+      [
+        {
+          ...realDaily("2026-11-21"),
+          source: "carried-forward",
+          carriedFromDate: "2026-11-20",
+        },
+      ],
+      now,
+      "repair",
+    );
+    expect((await readSync(db, before.cursor, now)).daily).toEqual([]);
+    expect((await readSync(db, null, now)).daily[0].huiSell).toBe(4.5);
+    expect(
+      (
+        await db
+          .prepare(
+            "SELECT * FROM sync_changes WHERE revision = ? AND entity = 'daily'",
+          )
+          .bind(meta.revision + 1)
+          .all()
+      ).results,
+    ).toEqual([]);
+  });
+
+  it("loses a repair atomically if another writer changes the daily snapshot", async () => {
+    await seedDaily([realDaily("2026-11-21")]);
+    const at = Date.parse("2026-11-23T10:01:05+08:00");
+    const tracked = new Proxy(db, {
+      get(target, key, receiver) {
+        if (key === "batch")
+          return async (commands: D1PreparedStatement[]) => {
+            const meta = await readMeta(db);
+            await commitCollection(
+              db,
+              meta.revision,
+              meta.state,
+              [],
+              [realDaily("2026-11-22", 4.5)],
+              at,
+              "history",
+            );
+            return target.batch(commands);
+          };
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    expect(await repairDailyGaps(tracked, at)).toBe(false);
+    expect((await readMeta(db)).state.dailyFilledThrough).toBeNull();
+    expect(
+      (await readSync(db, null, at)).daily.find((r) => r.date === "2026-11-22")
+        ?.huiSell,
+    ).toBe(4.5);
+    expect(await repairDailyGaps(db, at)).toBe(true);
+  });
   it("rejects incompatible client protocols without querying or clearing business data", async () => {
     await write();
     const result = await getSync(

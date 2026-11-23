@@ -1,4 +1,5 @@
-import { getBeijingDateString } from "./date";
+import { addDays, getBeijingDateString } from "./date";
+import { dailyGapFills } from "./daily-gaps";
 import { advanceCollection, minuteOf } from "./intraday";
 import { fetchIcbcToday } from "./icbc-today";
 import type { RateRecord } from "./rates-db";
@@ -10,7 +11,8 @@ export async function collectMinute(
   scheduledAt: number | null = null,
 ) {
   const now = Date.now();
-  const meta = await readMeta(db);
+  const fillThrough = addDays(getBeijingDateString(new Date(now)), -1);
+  const meta = await readMeta(db, fillThrough);
   if (
     meta.state.lastAttemptMinute !== null &&
     meta.state.lastAttemptMinute >= minuteOf(now)
@@ -41,7 +43,14 @@ export async function collectMinute(
   result.state.lastScheduledAt =
     scheduledAt === null ? null : new Date(scheduledAt).toISOString();
   result.state.demo = false;
-  const daily: RateRecord[] = [];
+  const daily: RateRecord[] = meta.gapSource
+    ? dailyGapFills([meta.gapSource], fillThrough)
+    : [];
+  if (
+    !result.state.dailyFilledThrough ||
+    result.state.dailyFilledThrough < fillThrough
+  )
+    result.state.dailyFilledThrough = fillThrough;
   if (
     result.accepted &&
     (result.accepted.publishedAt !== meta.state.lastSuccess?.publishedAt ||
@@ -71,6 +80,7 @@ export async function collectMinute(
       saved,
       success: Boolean(result.accepted),
       fixed: result.fixed.length,
+      daily: daily.length,
     }),
   );
   // Readers enforce retention immediately; physical maintenance can run every

@@ -2,6 +2,7 @@ import { addDays, getBeijingDateString } from "../src/lib/date";
 import { advanceCollection, dayStart, minuteOf } from "../src/lib/intraday";
 import { collectMinute } from "../src/lib/server-collector";
 import { collectHistory } from "../src/lib/history-collector";
+import { repairDailyGaps } from "../src/lib/daily-gap-repair";
 import {
   commitCollection,
   readMeta,
@@ -43,6 +44,14 @@ export async function run(db: D1Database, mode: string) {
   }
   if (mode === "collect") return collectMinute(db);
   if (mode === "backfill") return collectHistory(db);
+  if (mode === "repair-gaps") {
+    if (!(await repairDailyGaps(db)))
+      throw new Error("Daily gap repair conflicted with another write; retry.");
+    console.log(
+      "Local daily gaps repaired through yesterday. No upstream request was made.",
+    );
+    return;
+  }
   const now = Date.now();
   const meta = await readMeta(db);
   if (meta.revision > 0)

@@ -6,8 +6,20 @@ import { getPlatformProxy } from "wrangler";
 import { setTimeout as delay } from "node:timers/promises";
 
 const mode = process.argv[2];
-if (!["demo", "collect", "backfill", "reset", "watch", "check"].includes(mode))
-  throw new Error("Choose demo, collect, backfill, reset, watch or check");
+if (
+  ![
+    "demo",
+    "collect",
+    "backfill",
+    "repair-gaps",
+    "reset",
+    "watch",
+    "check",
+  ].includes(mode)
+)
+  throw new Error(
+    "Choose demo, collect, backfill, repair-gaps, reset, watch or check",
+  );
 // Use Wrangler's installed esbuild, without adding another build dependency.
 const require = createRequire(import.meta.url);
 const wranglerRequire = createRequire(require.resolve("wrangler"));

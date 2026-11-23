@@ -1,4 +1,5 @@
 import { addDays, getBeijingDateString } from "./date";
+import { dailyGapFills } from "./daily-gaps";
 import { parseHistoryHtml } from "./parse-history";
 import type { RateRecord } from "./rates-db";
 import { commitCollection, readMeta } from "./server-store";
@@ -30,18 +31,21 @@ export async function collectHistory(
     .filter((d): d is string => Boolean(d))
     .sort()[0];
   const records: RateRecord[] = [];
+  let latest = meta;
   try {
     const points = parseHistoryHtml(
       await fetchHtml(`${HISTORY_SOURCE_URL}?datefrom=${datefrom}`),
     ).filter((p) => p.date < today);
     if (!points.length) throw new Error("No completed history dates");
     const sorted = [...points].sort((a, b) => a.date.localeCompare(b.date));
-    const byDate = new Map(sorted.map((p) => [p.date, p]));
+    // Fence the following daily snapshot with this revision. A concurrent
+    // minute/history commit makes our entire batch lose rather than applying
+    // fills derived from an older set of real quotes.
+    latest = await readMeta(db);
+    const through = addDays(today, -1);
     const existingRows = await db
-      .prepare(
-        "SELECT value_json FROM daily_rates WHERE date >= ? AND date <= ?",
-      )
-      .bind(sorted[0].date, sorted.at(-1)!.date)
+      .prepare("SELECT value_json FROM daily_rates WHERE date <= ?")
+      .bind(through)
       .all<{ value_json: string }>();
     const existing = new Map(
       existingRows.results.map((row) => {
@@ -49,34 +53,24 @@ export async function collectHistory(
         return [record.date, record] as const;
       }),
     );
-    let lastReal: { date: string; huiSell: number } | null = null;
-    for (
-      let date = sorted[0].date;
-      date <= sorted.at(-1)!.date;
-      date = addDays(date, 1)
-    ) {
-      const point = byDate.get(date);
-      const saved = existing.get(date);
-      if (!point && saved && saved.source !== "carried-forward") {
-        lastReal = saved;
-        continue;
-      }
-      if (point) lastReal = point;
-      if (lastReal)
-        records.push({
-          date,
-          huiSell: lastReal.huiSell,
-          publishedAt: null,
-          source: point ? "history" : "carried-forward",
-          carriedFromDate: point ? null : lastReal.date,
-        });
+    for (const point of sorted) {
+      const record: RateRecord = {
+        ...point,
+        publishedAt: null,
+        source: "history",
+        carriedFromDate: null,
+      };
+      existing.set(point.date, record);
+      records.push(record);
     }
+    records.push(...dailyGapFills([...existing.values()], through));
     historyDate = sorted.at(-1)!.date;
   } catch {
+    records.length = 0;
     historyError = "history-unavailable-or-invalid";
+    latest = await readMeta(db);
   }
   // Merge only history fields into the latest minute state after remote work.
-  const latest = await readMeta(db);
   const confirmedDate = historyError
     ? latest.state.historyDate
     : ([historyDate, latest.state.historyDate]
@@ -84,6 +78,7 @@ export async function collectHistory(
         .sort()
         .at(-1) ?? null);
   const state = { ...latest.state, historyDate: confirmedDate, historyError };
+  if (!historyError) state.dailyFilledThrough = addDays(today, -1);
   state.historyAttempts =
     state.historyAttemptDate === today ? state.historyAttempts + 1 : 1;
   state.historyAttemptDate = today;

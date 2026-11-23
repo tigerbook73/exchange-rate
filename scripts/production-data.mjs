@@ -7,8 +7,13 @@ import wrangler from "wrangler";
 const { getPlatformProxy, unstable_readConfig: readConfig } = wrangler;
 
 const mode = process.argv[2];
-if (!["check", "bootstrap"].includes(mode) || process.argv[3] !== "--remote")
-  throw new Error("Choose check or bootstrap and explicitly pass --remote.");
+if (
+  !["check", "bootstrap", "repair-gaps"].includes(mode) ||
+  process.argv[3] !== "--remote"
+)
+  throw new Error(
+    "Choose check, bootstrap or repair-gaps and explicitly pass --remote.",
+  );
 const config = readConfig({ config: "wrangler.jsonc" });
 const database = config.d1_databases.find(({ binding }) => binding === "DB");
 if (!database?.database_id || database.database_id.startsWith("00000000-"))
@@ -48,7 +53,7 @@ const wranglerRequire = createRequire(require.resolve("wrangler"));
 await wranglerRequire("esbuild").build({
   stdin: {
     contents:
-      'export {collectMinute} from "./src/lib/server-collector"; export {collectHistory} from "./src/lib/history-collector"; export {readMeta} from "./src/lib/server-store"; export {checkDatabaseCompatibility} from "./src/lib/db-schema";',
+      'export {collectMinute} from "./src/lib/server-collector"; export {collectHistory} from "./src/lib/history-collector"; export {repairDailyGaps} from "./src/lib/daily-gap-repair"; export {readMeta} from "./src/lib/server-store"; export {checkDatabaseCompatibility} from "./src/lib/db-schema";',
     resolveDir: process.cwd(),
   },
   outfile: ".wrangler/production-actions.mjs",
@@ -68,6 +73,7 @@ try {
     collectHistory,
     readMeta,
     checkDatabaseCompatibility,
+    repairDailyGaps,
   } = await import(
     pathToFileURL(resolve(".wrangler/production-actions.mjs")).href
   );
@@ -88,6 +94,15 @@ try {
       throw new Error(
         "History update conflicted with another write; deployment must stop and retry.",
       );
+  }
+  if (mode === "repair-gaps") {
+    let updated = false;
+    for (let attempt = 0; attempt < 4 && !updated; attempt++) {
+      updated = await repairDailyGaps(proxy.env.DB);
+      if (!updated && attempt < 3)
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+    if (!updated) throw new Error("Daily gap repair conflicted; retry.");
   }
   const meta = await readMeta(proxy.env.DB);
   const counts = await proxy.env.DB.prepare(
@@ -113,7 +128,7 @@ try {
       2,
     ),
   );
-  if (!ready)
+  if (!ready && mode !== "repair-gaps")
     throw new Error("Production data is not ready; do not switch the website.");
 } finally {
   await proxy.dispose();

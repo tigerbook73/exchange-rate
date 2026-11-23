@@ -38,6 +38,8 @@ export interface CollectionState {
   historyAttemptDate: string | null;
   historyAttempts: number;
   historyError: string | null;
+  /** Last completed Beijing date processed by daily gap maintenance. */
+  dailyFilledThrough: string | null;
   demo: boolean;
 }
 
@@ -57,6 +59,7 @@ export function emptyCollectionState(): CollectionState {
     historyAttemptDate: null,
     historyAttempts: 0,
     historyError: null,
+    dailyFilledThrough: null,
     demo: false,
   };
 }

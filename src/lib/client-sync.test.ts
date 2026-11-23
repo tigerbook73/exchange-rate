@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyServerSync, readClientCache } from "./client-sync";
 import { openRatesDb, type RatesDb } from "./rates-db";
 import { emptyCollectionState, type SyncResponse } from "./server-types";
+import { buildChartSeries } from "./rate-view";
 
 let db: RatesDb;
 const id = "a".repeat(32);
@@ -40,6 +41,50 @@ beforeEach(async () => {
 });
 afterEach(() => db.close());
 describe("client authority and incremental sync", () => {
+  it("updates the chart series when a delta fills a missing day and then corrects it", async () => {
+    await applyServerSync(db, response());
+    const chart = async () =>
+      buildChartSeries((await readClientCache(db)).records, "7d", "2026-11-22");
+    expect(
+      (await chart()).find((r) => r.date === "2026-11-21")?.huiSell,
+    ).toBeNull();
+    const delta = response(2, "delta");
+    delta.daily = [
+      {
+        date: "2026-11-21",
+        huiSell: 4.4331,
+        publishedAt: null,
+        source: "carried-forward",
+        carriedFromDate: "2026-11-20",
+      },
+    ];
+    await applyServerSync(db, delta);
+    expect((await chart()).find((r) => r.date === "2026-11-21")).toMatchObject({
+      huiSell: 4.4331,
+      isCarriedForward: true,
+      note: "该日期未更新，数据来自 2026-11-20",
+    });
+    delta.revision = 3;
+    delta.cursor = `${id}.3`;
+    delta.daily = [
+      {
+        ...delta.daily[0],
+        huiSell: 4.45,
+        source: "history",
+        carriedFromDate: null,
+      },
+    ];
+    await applyServerSync(db, delta);
+    expect((await chart()).find((r) => r.date === "2026-11-21")).toMatchObject({
+      huiSell: 4.45,
+      isCarriedForward: false,
+      note: undefined,
+    });
+    expect(
+      (await readClientCache(db)).records.find((r) => r.date === "2026-11-22")
+        ?.huiSell,
+    ).toBe(4.75);
+  });
   it("clears obsolete local archives only with a validated replacement snapshot", async () => {
     await applyServerSync(db, response());
     await db.put("rates", {

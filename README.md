@@ -21,7 +21,7 @@ pnpm db:demo
 pnpm dev
 ```
 
-打开 <http://localhost:3000>。`db:demo` 生成标明“本地演示数据”的一年每日历史和三日分时数据，不请求源站；该命令仅适用于空库，不覆盖已有数据。演示是固定快照，不会自行刷新价格。
+打开 <http://localhost:3000>。`db:demo` 生成一年每日历史和三日分时演示数据，不请求源站；该命令仅适用于空库，不覆盖已有数据。演示是固定快照，不会自行刷新价格；页面不再显示演示提示，切换真实数据前须先显式重置本地演示库。
 
 实际 PWA 安装和断网重载请使用生产模式的本地预览：
 
@@ -51,13 +51,15 @@ pnpm db:collect
 
 `db:backfill` 初始化 / 校准每日历史，`db:collect` 采集一次当前报价。现价命令访问工商银行 JSON API，历史回填访问快易理财网。演示库拒绝混入真实数据，需先明确执行本地 reset。
 
+`pnpm db:repair-gaps` 仅根据本地已有真实 / 暂定日报价补齐截至北京时间昨天的内部与尾部缺日；`pnpm db:repair-gaps:remote` 对生产 D1 执行同样修复。两者不请求源站、不清库、不推进历史确认游标，可以重复执行。沿用值标明最近真实来源日期，不代表已确认银行该日未发布报价；后续历史校准会用真实值替换并重算后续沿用值。没有此前真实记录的日期保持缺失，今天不生成沿用记录。
+
 持续本地采集：
 
 ```bash
 pnpm collector:local
 ```
 
-运行时立即采集一次，随后每分钟只采集现价，不自动校准历史；Ctrl+C 停止。它直接操作本地模拟 D1，不模拟云端 Cron 的触发可靠性。
+运行时立即采集一次，随后每分钟采集现价，不自动请求历史源；每日首次成功提交状态时顺带补齐截至昨天的尾部缺日，即使该次现价请求失败也补。Ctrl+C 停止。它直接操作本地模拟 D1，不模拟云端 Cron 的触发可靠性。
 
 `pnpm collector:dev` 用于独立采集 Worker 的 Wrangler 调试，提供本地 `http://localhost:8787/__scheduled` 测试入口；Wrangler dev 不会自行每分钟触发 Cron，持续本地采集应使用上面的 `collector:local`。线上 Worker 无公开采集端点。
 
@@ -98,7 +100,7 @@ pnpm run deploy:collector
 
 统一入口 `pnpm run deploy` 会先完成 OpenNext 构建，再应用远程 D1 migration、在本机 / CI 运行 `db:bootstrap:remote`，同步现价和历史、检查就绪，随后依次发布采集及网站 Worker；`pnpm run deploy:collector` 同样在发布前同步数据。历史同步失败或提交持续冲突会终止发布。
 
-`db:bootstrap:remote` 使用已有历史游标增量校准，首次回溯一年，不清库。日常 Cron 只采现价并更新当日每日值、按既有规则清理过期分时 / 日志；长期不部署期间的历史漏采与校准要等下一次部署或显式回填。每日历史长期保留。直接调用原始 Wrangler / OpenNext 发布命令会绕过同步步骤，Cloudflare Builds 也应使用统一入口。网站 API 和 App 刷新均不触发采集。采集 Worker 不开放 workers.dev 或版本预览 URL。
+`db:bootstrap:remote` 使用已有历史游标增量校准，首次回溯一年，不清库，并补齐截至昨天的每日缺日。日常 Cron 采现价、更新当日每日值、每日补齐尾部缺日，并按既有规则清理过期分时 / 日志；长期不部署期间的真实历史校准仍要等下一次部署或显式回填，沿用值不替代真实校准。每日历史长期保留。直接调用原始 Wrangler / OpenNext 发布命令会绕过同步步骤，Cloudflare Builds 也应使用统一入口。网站 API 和 App 刷新均不触发采集。采集 Worker 不开放 workers.dev 或版本预览 URL。
 
 `pnpm upload` 也会真正上传版本，不是本地预览。`git push` 仍需单独授权。Cloudflare Builds 的触发器读取曾返回 403，Vercel Git 自动部署也未在本次修改；下次推送前须在控制台核对并处理，避免旧 main 构建覆盖手工发布版本。
 
