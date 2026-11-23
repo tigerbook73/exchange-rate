@@ -23,7 +23,7 @@
 - 刷新主题修复：HTML 在应用 JS/CSS 到达前初始化主题及底色；本地生产预览 28 项页面 / PWA 用例通过，正式站的亮暗资源延迟、刷新主题及真实 SW 离线重载 4 项检查通过。页面 API mock 用例阻止 SW 接管，真实 SW 单独验证。
 - 本地：格式、lint、浏览器 / 网站 / SW / collector / Node 工具及测试类型通过；91 项 Vitest（含隔离 D1）、27 项 Chromium 页面回归、生产 PWA 接管及离线重载通过；两个 Worker 打包通过。
 - 升级：本地旧 Next PWA → Vite、Vite → Vite 更新均保留 IndexedDB / 游标并离线重载。正式站也使用发布前建立的持久浏览器状态验证真实旧版升级：datasetId 和 schema 不变，366 条本地每日数据保留，离线整页重载通过，页面错误 0；亮暗移动截图已检查。
-- 生产 API：snapshot / delta、兼容 today / history、426 协议升级、409 游标重建、410 过期分时、未知 API 404 和方法 405 均通过。首页改为 /assets 资源，manifest 的 start_url / scope 保持根路径。
+- 重构上线时生产 API：snapshot / delta、当时保留的 today / history、426 协议升级、409 游标重建、410 过期分时、未知 API 404 和方法 405 均通过。首页改为 /assets 资源，manifest 的 start_url / scope 保持根路径。
 - 重构上线时 collector 在 `2026-11-23T03:06:20Z` 自然 Cron 成功，D1 记录真实采集成功。03:07 一轮源站失败保留最近报价，03:08、03:09 自然 Cron 已恢复，`lastError=null`、失败计数为 0；未清历史，持续稳定性仍需观察。
 - 重构首轮 Analytics 的 collector CPU 字段 cpuTimeP50 为 5054，平台 errors 为 0；网站样本也无平台错误。样本有限，不能据此认定长期免费额度通过，源站失败与平台错误分别判断。
 - 原始生产验证与指标：`.wrangler/vite-production-verification.json`；升级浏览器、截图和本地旧构建：`.wrangler/migration-baseline/`。均为本地忽略文件，不纳入 Git。长期需要的备份应另行保管。
@@ -50,6 +50,6 @@ pnpm exec wrangler rollback 4b62a80d-045d-434e-8674-e9e16c09f834 --config collec
 | 长期额度和缓存    | 继续观察 Cron / 网站 CPU、D1 用量、实际 CDN 命中；新代码不使用 R2，旧桶仍保留。不能因短期成功自动调整套餐或宣称全站免费达标                                             |
 | 采集窗口          | 至少两周的时间分布观察未完成，继续全天采集，不硬编码周末或缩短窗口                                                                                                      |
 | 恢复与回滚演练    | 备份已导出，尚未做破坏性的生产恢复或真实回滚演练；后续在隔离资源验证，不为验收重置生产                                                                                  |
-| 旧兼容实现        | 旧现价 HTML 解析器仅显式比较，兼容 API / 本地旧缓存逻辑继续保留；无独立退役依据前不删除                                                                                 |
+| 旧兼容实现        | 用户已确认退役 today / history API，本地已删除，尚未发布；旧缓存升级和 API 响应清理继续保留。旧现价 HTML 解析器仅显式比较，无独立退役依据前不删除                       |
 | 原设备图表拖影    | 原设备未确认解决，截图及自动化不足以确认成因；本次保持交互，不扩展修复范围                                                                                              |
 | 旧资源清理        | 稳定并确认回退需求后再决定旧 R2 等资源退役；未自动删除                                                                                                                  |
