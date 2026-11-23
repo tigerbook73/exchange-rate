@@ -1,5 +1,3 @@
-"use client";
-
 import { useCallback, useEffect, useRef, useState } from "react";
 import { applyServerSync, readClientCache } from "./client-sync";
 import { openRatesDb } from "./rates-db";

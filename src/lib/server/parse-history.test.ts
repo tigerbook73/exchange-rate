@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parseHistoryHtml } from "./parse-history";
 
 const fixture = readFileSync(
-  join(__dirname, "__fixtures__/d-icbc-aud.html"),
+  join(import.meta.dirname, "__fixtures__/d-icbc-aud.html"),
   "utf-8",
 );
 

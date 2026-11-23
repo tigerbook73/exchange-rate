@@ -31,7 +31,7 @@ export async function collectHistory(
     .filter((d): d is string => Boolean(d))
     .sort()[0];
   const records: RateRecord[] = [];
-  let latest = meta;
+  let latest: Awaited<ReturnType<typeof readMeta>>;
   try {
     const points = parseHistoryHtml(
       await fetchHtml(`${HISTORY_SOURCE_URL}?datefrom=${datefrom}`),

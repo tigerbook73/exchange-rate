@@ -19,15 +19,14 @@ import {
   ResetRequired,
 } from "./server-store";
 import { advanceCollection } from "../domain/intraday";
-import { emptyCollectionState } from "../contracts/server-types";
+import {
+  emptyCollectionState,
+  type SyncResponse,
+} from "../contracts/server-types";
 import type { RateRecord } from "../contracts/rate-types";
 import { repairDailyGaps } from "./daily-gap-repair";
 import { checkDatabaseCompatibility, DatabaseSchemaError } from "./db-schema";
 
-const runtime = vi.hoisted(() => ({ db: null as D1Database | null }));
-vi.mock("@opennextjs/cloudflare", () => ({
-  getCloudflareContext: async () => ({ env: { DB: runtime.db } }),
-}));
 vi.mock("./sources", () => ({
   TODAY_SOURCE_URL: "https://example.invalid/today",
   HISTORY_SOURCE_URL: "https://example.invalid/history",
@@ -45,12 +44,17 @@ import { fetchSourceHtml } from "./sources";
 import { collectMinute } from "./server-collector";
 import { collectHistory } from "./history-collector";
 import { fetchIcbcToday, parseIcbcToday } from "./icbc-today";
-import { GET as getSync } from "../../app/api/sync/route";
-import { GET as getToday } from "../../app/api/today/route";
-import { GET as getHistory } from "../../app/api/history/route";
+import { GET as handleSync } from "./api/sync";
+import { GET as handleToday } from "./api/today";
+import { GET as handleHistory } from "./api/history";
+import { handleApi } from "../../../worker/index";
 
 let proxy: Awaited<ReturnType<typeof getPlatformProxy<CloudflareEnv>>>;
 let db: D1Database;
+const getSync = (request: Request) => handleSync(request, db);
+const getToday = () =>
+  handleToday(new Request("http://localhost/api/today"), db);
+const getHistory = (request: Request) => handleHistory(request, db);
 const now = Date.parse("2026-11-22T10:05:05+08:00");
 function realDaily(date: string, huiSell = 4.4331): RateRecord {
   return {
@@ -92,7 +96,7 @@ beforeAll(async () => {
     persist: false,
   });
   db = proxy.env.DB;
-  runtime.db = db;
+
   const sql = readdirSync("migrations")
     .filter((file) => file.endsWith(".sql"))
     .sort()
@@ -765,6 +769,50 @@ describe("D1 persistence and read-only API", () => {
     } finally {
       clock.mockRestore();
     }
+  });
+  it("routes Worker APIs without SPA fallback or writes and preserves HTTP validation", async () => {
+    for (const [path, method, status] of [
+      ["/api/unknown", "GET", 404],
+      ["/api", "GET", 404],
+      ["/api/sync", "POST", 405],
+      ["/api/intraday?date=bad", "GET", 400],
+      ["/api/history?datefrom=bad", "GET", 400],
+      ["/api/sync?schema=999", "GET", 426],
+      ["/api/sync", "GET", 503],
+    ] as const) {
+      const response = await handleApi(
+        new Request(`http://localhost${path}`, { method }),
+        db,
+      );
+      expect(response.status).toBe(status);
+      expect(response.headers.get("Content-Type")).toContain(
+        "application/json",
+      );
+      if (status === 405) expect(response.headers.get("Allow")).toBe("GET");
+    }
+    await write();
+    const valid = await handleApi(
+      new Request("http://localhost/api/sync?schema=1"),
+      db,
+    );
+    const data = await valid.json<SyncResponse>();
+    expect(valid.status).toBe(200);
+    expect(valid.headers.get("Cache-Control")).toBe(
+      "public, s-maxage=15, stale-while-revalidate=15",
+    );
+    expect(data).toMatchObject({ schema: 1, mode: "snapshot" });
+    const delta = await handleApi(
+      new Request(`http://localhost/api/sync?schema=1&cursor=${data.cursor}`),
+      db,
+    );
+    expect(await delta.json()).toMatchObject({
+      cursor: data.cursor,
+      mode: "delta",
+      daily: [],
+      points: [],
+    });
+    expect(fetchSourceHtml).not.toHaveBeenCalled();
+    expect(fetchIcbcToday).not.toHaveBeenCalled();
   });
   it("never fetches upstream on empty DB, forced refresh arguments or repeated reads", async () => {
     expect(

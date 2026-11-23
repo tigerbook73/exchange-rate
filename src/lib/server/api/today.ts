@@ -1,10 +1,8 @@
 import { queryError, queryServer, serverJson } from "@/lib/server/server-api";
 
-export const dynamic = "force-dynamic";
-
-export async function GET() {
+export async function GET(_request: Request, db: D1Database) {
   try {
-    const data = await queryServer();
+    const data = await queryServer(db);
     const quote = data.state.lastSuccess;
     if (!quote) return queryError(new Error("No quote"));
     return serverJson({

@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 
 // Not part of the standard DOM lib types.

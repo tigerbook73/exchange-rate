@@ -5,8 +5,8 @@
 ## 当前状态
 
 - 更新日期：2026-11-23。
-- 已创建计划与进展文档；第一阶段文档整理已完成，未修改应用代码、依赖、数据库或云端配置。
-- 当前实现仍为 Next.js + OpenNext，Vite + React + Workers 是迁移目标。
+- 已创建计划与进展文档；前三阶段本地实现已完成；PWA 与发布预检进行中。未修改生产数据结构或发布新版。
+- 当前本地实现为 Vite + React + Workers；线上仍为 Next.js/OpenNext，切换尚未执行。
 - 本地与线上基线暂依据旧进度记录（现已归并，过程可在 Git 历史查阅）及当前仓库，尚未重新核验云端：当前源码已有无租约采集与部署前检查；旧记录中的 `7529cbf` 不在当前 main 提交历史中，不将其当作当前提交身份；这些优化的生产状态尚未重新核验，不能视为已上线。
 - 实施中；未推送、未部署；历史授权与后续操作规则仍见 AGENTS，计划不代替操作授权。
 
@@ -17,8 +17,8 @@
 | 规划                   | 文档已建立 | 按第一阶段范围开始文档整理         |
 | 一：文档与流程整理     | 已完成     | 盘点规则和重复内容，核对旧待办去向 |
 | 二：模块边界整理       | 已完成     | 第一阶段验收后执行                 |
-| 三：替换构建与网站入口 | 进行中     | 第二阶段验收后执行                 |
-| 四：PWA 兼容与发布准备 | 未开始     | 验证新装与旧版升级两条路径         |
+| 三：替换构建与网站入口 | 已完成     | 第二阶段验收后执行                 |
+| 四：PWA 兼容与发布准备 | 进行中     | 验证新装与旧版升级两条路径         |
 | 五：生产切换           | 未开始     | 就绪后按有效授权执行               |
 | 六：最终文档整理与清理 | 未开始     | 最终核对、归位结论并删除过渡记录   |
 
@@ -73,3 +73,8 @@
 - 第一阶段：精简 AGENTS，按职责去重流程，修正 blueprint 中“未部署”和演示提示等过时描述；迁移旧待办、最后发布版本、备份和回退依据；删除旧阶段计划与流水账。现行 Next.js 约束继续保留。
 
 - 第二阶段：业务模块已分为 domain / contracts / client / server，共享 RateRecord 不再定义于 IndexedDB 模块。fixture 与服务端测试同目录。三套类型检查、lint、90 项 Vitest（含本地 D1）通过；测试使用允许本地端口的环境，不访问生产。旧版 OpenNext 生产构建已通过并保存在忽略目录 `.wrangler/migration-baseline/`，供同源升级验证。
+
+- 第三阶段：Vite 8 / Cloudflare Vite 插件 / Serwist Vite 已替换 Next.js/OpenNext；四个 API 直接接收 D1，保留路径、协议、缓存头和错误语义。系统主题、metadata、manifest、图标及自托管 Geist 字体已迁移。网站只保留 D1 与 ASSETS binding，旧云端 R2 未删除。ESLint 10 与 Node 24 类型对齐；旧 api-cache 未使用，已删除；history-collector 的无效初始赋值改为类型声明，不改变查询或提交顺序。
+- 本地验证：91 项单测、25 项 Chromium 页面用例、独立生产 PWA 用例均通过；旧 Next PWA 同源升级及普通 Vite-to-Vite 更新的持久浏览器验证通过，保留 fx-cache v2、schema 1、datasetId / cursor，离线可重载。截图位于 `.wrangler/migration-baseline/`，亮暗已检查；旧版也存在的按钮外观未扩展修改。网站包 8.43KiB / gzip 2.94KiB；collector 15.15KiB / gzip 4.89KiB，均为干跑数据，不代表线上性能。
+- 2026-11-23 实时发布预检：现有线上网站为 `9a081451-cf64-4776-8408-a18be22939c0`、collector 为 `63cfbacb-0158-440e-9f37-c3c653fde2a9`，与旧记录不同，以上两版是本次直接回退基线。远程 check 通过（schema 1、367 条每日数据、datasetId `150f265f977693ec8da3ef1a0a192959`、ready true）；兼容检查确认 write_id 已存在。生产备份已导出至 `.wrangler/backups/2026-11-23-before-vite.sql`（约 409KiB）。
+- Workers Builds 两个 trigger GET 再次返回 403；未改控制台，未推送。手动发布不依赖该查询，首次 push 前仍需核实流水线和令牌。

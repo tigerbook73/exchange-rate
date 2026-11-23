@@ -1,5 +1,3 @@
-"use client";
-
 import {
   CategoryScale,
   Chart as ChartJS,
@@ -25,7 +23,7 @@ ChartJS.register(
 
 // Fast Refresh can retain the old globally registered canvas plugin after
 // switching to a local overlay plugin. Remove it from existing dev charts.
-if (process.env.NODE_ENV === "development") {
+if (import.meta.env.DEV) {
   ChartJS.unregister({ id: "crosshair" });
 }
 
@@ -81,7 +79,6 @@ export function RateChart({
     [],
   );
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time client-mount flag, cannot be derived from props/state
     setMounted(true);
   }, []);
 

@@ -9,3 +9,5 @@ public/sw.js.map
 test-results
 playwright-report
 pnpm-lock.yaml
+
+dist

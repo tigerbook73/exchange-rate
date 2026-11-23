@@ -1,5 +1,3 @@
-"use client";
-
 import { useMemo, useState } from "react";
 import { InstallButton } from "@/components/install-button";
 import { RangeToggle } from "@/components/range-toggle";

@@ -1,13 +1,12 @@
-import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { readSync, ResetRequired } from "./server-store";
 import type { SyncResponse } from "../contracts/server-types";
 import { DatabaseSchemaError } from "./db-schema";
 
 export async function queryServer(
+  db: D1Database,
   cursor: string | null = null,
 ): Promise<SyncResponse> {
-  const { env } = await getCloudflareContext({ async: true });
-  return readSync(env.DB, cursor);
+  return readSync(db, cursor);
 }
 
 export function queryError(error: unknown) {

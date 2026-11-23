@@ -1,9 +1,7 @@
 import { queryError, queryServer, serverJson } from "@/lib/server/server-api";
 import { SYNC_SCHEMA } from "@/lib/contracts/server-types";
 
-export const dynamic = "force-dynamic";
-
-export async function GET(request: Request) {
+export async function GET(request: Request, db: D1Database) {
   const params = new URL(request.url).searchParams;
   const clientSchema = params.get("schema");
   if (clientSchema !== null && clientSchema !== String(SYNC_SCHEMA))
@@ -16,7 +14,7 @@ export async function GET(request: Request) {
       { status: 426, headers: { "Cache-Control": "no-store" } },
     );
   try {
-    const data = await queryServer(params.get("cursor"));
+    const data = await queryServer(db, params.get("cursor"));
     if (!data.state.lastSuccess && !data.state.historyDate)
       return queryError(new Error("Not initialized"));
     return serverJson(data);

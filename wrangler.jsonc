@@ -1,46 +1,26 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "main": ".open-next/worker.js",
+  "main": "worker/index.ts",
   "name": "icbc-rate",
   "account_id": "efda20f0c218e9d7193bcd2b228c35de",
   "workers_dev": true,
   "routes": [{ "pattern": "icbc-rate.tigerbook.top", "custom_domain": true }],
-  "compatibility_date": "2026-08-11",
-  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"],
+  "compatibility_date": "2026-11-23",
+  "compatibility_flags": ["global_fetch_strictly_public"],
   "assets": {
-    "directory": ".open-next/assets",
     "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api", "/api/*"],
   },
-  "services": [
-    {
-      // Self-reference service binding, the service name must match the worker name
-      // see https://opennext.js.org/cloudflare/caching
-      "binding": "WORKER_SELF_REFERENCE",
-      "service": "icbc-rate",
-    },
-  ],
-  "r2_buckets": [
-    // Use R2 incremental cache
-    // See https://opennext.js.org/cloudflare/caching
-    {
-      "binding": "NEXT_INC_CACHE_R2_BUCKET",
-      "bucket_name": "icbc-rate-opennext-cache",
-    },
-  ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "icbc-rate",
       "database_id": "d6a2a857-d667-4344-a049-ee4457ddb4ee",
-      // Preserve the isolated local database; local development never uses production D1.
       "preview_database_id": "00000000-0000-0000-0000-000000000001",
       "migrations_dir": "migrations",
+      "remote": false,
     },
   ],
   "observability": { "enabled": true, "traces": { "enabled": true } },
-  "images": {
-    // Enable image optimization
-    // see https://opennext.js.org/cloudflare/howtos/image
-    "binding": "IMAGES",
-  },
 }

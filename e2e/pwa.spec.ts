@@ -11,7 +11,7 @@ test("production service worker controls the page and reloads cached data offlin
 }) => {
   test.skip(
     !process.env.PLAYWRIGHT_BASE_URL,
-    "Run against the production local OpenNext preview",
+    "Run against the production local Vite preview",
   );
   const now = Date.now();
   const date = getBeijingDateString(new Date(now));

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { parseTodayHtml } from "./parse-today";
 
 const fixture = readFileSync(
-  join(__dirname, "__fixtures__/b-icbc.html"),
+  join(import.meta.dirname, "__fixtures__/b-icbc.html"),
   "utf-8",
 );
 
