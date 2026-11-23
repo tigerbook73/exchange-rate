@@ -7,12 +7,9 @@ import prettier from "eslint-config-prettier";
 export default defineConfig([
   globalIgnores([
     "dist/**",
-    ".next/**",
-    ".open-next/**",
     "**/.wrangler/**",
     "cloudflare-env.d.ts",
     "collector/worker-configuration.d.ts",
-    "next-env.d.ts",
     "public/sw.js",
     "test-results/**",
     "playwright-report/**",
@@ -34,14 +31,7 @@ export default defineConfig([
         {
           patterns: [
             {
-              group: [
-                "**/client/*",
-                "**/server/*",
-                "next",
-                "next/*",
-                "@opennextjs/*",
-                "idb",
-              ],
+              group: ["**/client/*", "**/server/*", "idb"],
               message:
                 "Domain and contracts must be independent of runtime adapters.",
             },
@@ -58,9 +48,8 @@ export default defineConfig([
         {
           patterns: [
             {
-              group: ["**/client/*", "next", "next/*", "@opennextjs/*"],
-              message:
-                "Server modules must not depend on client or framework adapters.",
+              group: ["**/client/*"],
+              message: "Server modules must not depend on client modules.",
             },
           ],
         },

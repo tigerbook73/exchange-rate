@@ -30,36 +30,3 @@ export function openRatesDb(): Promise<RatesDb> {
     },
   });
 }
-
-export async function upsertRates(
-  db: RatesDb,
-  records: RateRecord[],
-): Promise<void> {
-  const tx = db.transaction(STORE_NAME, "readwrite");
-  await Promise.all([
-    ...records.map((record) => tx.store.put(record)),
-    tx.done,
-  ]);
-}
-
-export async function getAllRates(db: RatesDb): Promise<RateRecord[]> {
-  return db.getAll(STORE_NAME);
-}
-
-/** The newest date with a local record, or null if the store is empty. */
-export async function getLatestDate(db: RatesDb): Promise<string | null> {
-  const records = await getAllRates(db);
-  return records.reduce<string | null>(
-    (max, r) => (max === null || r.date > max ? r.date : max),
-    null,
-  );
-}
-
-/** The oldest date with a local record, or null if the store is empty. */
-export async function getEarliestDate(db: RatesDb): Promise<string | null> {
-  const records = await getAllRates(db);
-  return records.reduce<string | null>(
-    (min, r) => (min === null || r.date < min ? r.date : min),
-    null,
-  );
-}

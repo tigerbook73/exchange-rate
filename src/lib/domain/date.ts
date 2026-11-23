@@ -2,6 +2,12 @@
 // timezone; both must be resolved against Beijing time (Asia/Shanghai),
 // never the server's local timezone.
 const SOURCE_TIME_ZONE = "Asia/Shanghai";
+const beijingDateFormatter = new Intl.DateTimeFormat("en-CA", {
+  timeZone: SOURCE_TIME_ZONE,
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
 const PUBLISHED_AT_PATTERN = /^(\d{2})-(\d{2})\s+(\d{2}):(\d{2})$/;
 
 export interface ParsedPublishedAt {
@@ -77,13 +83,7 @@ export function isValidDate(value: string): boolean {
  * interpreted everywhere else in the app.
  */
 export function getBeijingDateString(now: Date = new Date()): string {
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: SOURCE_TIME_ZONE,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
-  return formatter.format(now);
+  return beijingDateFormatter.format(now);
 }
 
 /** Adds `delta` calendar days (may be negative) to an ISO date string. */

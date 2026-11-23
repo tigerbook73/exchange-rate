@@ -1,6 +1,4 @@
 node_modules
-.next
-.open-next
 .wrangler
 cloudflare-env.d.ts
 collector/worker-configuration.d.ts

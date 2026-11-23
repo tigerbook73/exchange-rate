@@ -46,17 +46,12 @@ import { collectMinute } from "./server-collector";
 import { collectHistory } from "./history-collector";
 import { fetchIcbcToday, parseIcbcToday } from "./icbc-today";
 import { GET as handleSync } from "./api/sync";
-import { GET as handleToday } from "./api/today";
-import { GET as handleHistory } from "./api/history";
 import { GET as handleIntraday } from "./api/intraday";
 import { handleApi } from "../../../worker/index";
 
 let proxy: Awaited<ReturnType<typeof getPlatformProxy<CloudflareEnv>>>;
 let db: D1Database;
 const getSync = (request: Request) => handleSync(request, db);
-const getToday = () =>
-  handleToday(new Request("http://localhost/api/today"), db);
-const getHistory = (request: Request) => handleHistory(request, db);
 const now = Date.parse("2026-11-22T10:05:05+08:00");
 function realDaily(date: string, huiSell = 4.4331): RateRecord {
   return {
@@ -956,7 +951,8 @@ describe("D1 persistence and read-only API", () => {
       ["/api", "GET", 404],
       ["/api/sync", "POST", 405],
       ["/api/intraday?date=bad", "GET", 400],
-      ["/api/history?datefrom=bad", "GET", 400],
+      ["/api/today", "GET", 404],
+      ["/api/history?datefrom=bad", "GET", 404],
       ["/api/sync?schema=999", "GET", 426],
       ["/api/sync", "GET", 503],
     ] as const) {
@@ -998,13 +994,11 @@ describe("D1 persistence and read-only API", () => {
     expect(
       (await getSync(new Request("http://localhost/api/sync"))).status,
     ).toBe(503);
-    expect((await getToday()).status).toBe(503);
     expect(
       (
-        await getHistory(
-          new Request(
-            "http://localhost/api/history?datefrom=2026-11-20&force=true",
-          ),
+        await handleIntraday(
+          new Request("http://localhost/api/intraday?force=true"),
+          db,
         )
       ).status,
     ).toBe(503);
@@ -1016,5 +1010,29 @@ describe("D1 persistence and read-only API", () => {
       ).toBe(200);
     expect(fetchSourceHtml).not.toHaveBeenCalled();
     expect(fetchIcbcToday).not.toHaveBeenCalled();
+  });
+  it("returns JSON 404 for retired APIs without reading or writing D1", async () => {
+    const prepare = vi.spyOn(db, "prepare");
+    try {
+      for (const path of [
+        "/api/today?force=true",
+        "/api/history?datefrom=bad",
+      ]) {
+        for (const method of ["GET", "POST"]) {
+          const response = await handleApi(
+            new Request(`http://localhost${path}`, { method }),
+            db,
+          );
+          expect(response.status).toBe(404);
+          expect(response.headers.get("Cache-Control")).toBe("no-store");
+          expect(await response.json()).toEqual({ error: "Not found" });
+        }
+      }
+      expect(prepare).not.toHaveBeenCalled();
+      expect(fetchSourceHtml).not.toHaveBeenCalled();
+      expect(fetchIcbcToday).not.toHaveBeenCalled();
+    } finally {
+      prepare.mockRestore();
+    }
   });
 });

@@ -1,4 +1,5 @@
-import { getBeijingDateString, isValidDate } from "../domain/date";
+import { isValidDate } from "../domain/date";
+import { dayStart } from "../domain/intraday";
 import type { RatesDb } from "./rates-db";
 import { SYNC_SCHEMA, type SyncResponse } from "../contracts/server-types";
 import { ApiUpgradeRequired } from "./api-upgrade";
@@ -110,10 +111,9 @@ export async function applyServerSync(
     await tx.objectStore("points").delete(minute);
   for (const record of data.daily) await tx.objectStore("rates").put(record);
   for (const point of data.points) await tx.objectStore("points").put(point);
-  for (const minute of await tx.objectStore("points").getAllKeys()) {
-    if (getBeijingDateString(new Date(minute)) < data.retainedFrom)
-      await tx.objectStore("points").delete(minute);
-  }
+  await tx
+    .objectStore("points")
+    .delete(IDBKeyRange.upperBound(dayStart(data.retainedFrom), true));
   // Only one live point, inside metadata. Never append intermediate minute prices.
   await tx
     .objectStore("server")

@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { parsePublishedAt } from "./date";
+import { getBeijingDateString, parsePublishedAt } from "./date";
+
+describe("Beijing date formatting", () => {
+  it.each([
+    ["2026-12-31T15:59:59.999Z", "2026-12-31"],
+    ["2026-12-31T16:00:00.000Z", "2027-01-01"],
+    ["2028-02-28T16:00:00.000Z", "2028-02-29"],
+    ["2028-02-29T16:00:00.000Z", "2028-03-01"],
+  ])("formats %s as %s independently of the local timezone", (time, date) => {
+    expect(getBeijingDateString(new Date(time))).toBe(date);
+  });
+});
 
 describe("parsePublishedAt", () => {
   it("resolves the year using the current month when there's no boundary crossing", () => {

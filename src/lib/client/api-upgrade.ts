@@ -66,6 +66,7 @@ export async function clearOldApiResponses(
   if (typeof caches === "undefined") return;
   const paths = new Set([
     "/api/sync",
+    // Retired endpoints can still exist in old offline response caches.
     "/api/today",
     "/api/history",
     "/api/intraday",

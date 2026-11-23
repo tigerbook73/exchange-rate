@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { displayQuoteDate, intradaySeries } from "./intraday-view";
+import { beijingTime, displayQuoteDate, intradaySeries } from "./intraday-view";
 import {
   emptyCollectionState,
   type IntradayPoint,
@@ -84,6 +84,37 @@ describe("intraday visible time range", () => {
       kind: "fixed",
     };
   }
+  it("keeps publication dates, times and prices correct across repeated calculations", () => {
+    const points = [point("10:00"), point("10:05", 47600)];
+    for (const item of points) {
+      item.publishedAt = "2026-11-21T23:59:00Z";
+      item.sourceRequestedAt = "2026-11-22T02:00:05Z";
+    }
+    const series = intradaySeries(points, null, date, at("10:05"));
+    expect(series).toMatchObject([
+      { label: "10:00", sourceTime: "10:00", huiSell: 4.75 },
+      { label: "10:05", sourceTime: "10:00", huiSell: 4.76 },
+    ]);
+    for (const item of points) item.publishedAt = "2026-11-21T15:59:00Z";
+    expect(intradaySeries(points, null, date, at("10:05"))).toEqual([]);
+    expect(beijingTime("2026-11-21T16:00:00Z")).toBe("00:00");
+    expect(beijingTime("2026-11-22T15:59:00Z")).toBe("23:59");
+  });
+  it("does not include a fresh live point from the following Beijing day", () => {
+    const state = emptyCollectionState();
+    state.live = {
+      ...point("23:55"),
+      minute: Date.parse("2026-11-23T00:01:00+08:00"),
+      kind: "live",
+    };
+    const series = intradaySeries(
+      [point("23:55")],
+      state,
+      date,
+      state.live.minute,
+    );
+    expect(series.map((p) => p.label)).toEqual(["23:55"]);
+  });
   it("trims empty edges and carries the last acquired value across internal gaps", () => {
     const series = intradaySeries(
       [point("10:00"), point("10:10", 47600)],

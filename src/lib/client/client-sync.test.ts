@@ -150,4 +150,40 @@ describe("client authority and incremental sync", () => {
     expect((await readClientCache(db)).server?.revision).toBe(3);
     expect((await readClientCache(db)).records[0].huiSell).toBe(4.75);
   });
+  it("atomically expires timestamp keys strictly before Beijing midnight during a delta", async () => {
+    await applyServerSync(db, response(3));
+    const boundary = Date.parse("2026-11-20T00:00:00+08:00");
+    const minutes = [
+      boundary - 300000,
+      boundary - 1,
+      boundary,
+      boundary + 300000,
+    ];
+    for (const minute of minutes) {
+      await db.put("points", {
+        minute,
+        kind: "fixed",
+        priceUnits: 47500,
+        sourceMinute: minute,
+        sourceRequestedAt: null,
+        publishedAt: null,
+        isFallback: false,
+      });
+    }
+    expect(await applyServerSync(db, response(2, "delta"))).toBe(false);
+    expect(await db.getAllKeys("points")).toEqual(minutes);
+    const delta = response(4, "delta");
+    delta.daily = [];
+    delta.deletedPoints = [boundary + 300000];
+    await applyServerSync(db, delta);
+    expect(await db.getAllKeys("points")).toEqual([boundary]);
+    expect((await db.get("server", "current"))?.cursor).toBe(`${id}.4`);
+    expect(await db.get("rates", "2026-11-22")).toBeDefined();
+    const next = response(5, "delta");
+    next.retainedFrom = "2026-11-21";
+    next.daily = [];
+    await applyServerSync(db, next);
+    expect(await db.getAllKeys("points")).toEqual([]);
+    expect((await db.get("server", "current"))?.cursor).toBe(`${id}.5`);
+  });
 });

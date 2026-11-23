@@ -8,13 +8,15 @@ import {
   type IntradayPoint,
 } from "../contracts/server-types";
 
+const beijingTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
+  timeZone: "Asia/Shanghai",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
+
 export function beijingTime(value: number | string): string {
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(new Date(value));
+  return beijingTimeFormatter.format(new Date(value));
 }
 
 /** Acquisition can succeed while the source is still publishing an older day's quote. */
@@ -47,8 +49,9 @@ export function intradaySeries(
   records: RateRecord[] = [],
 ): ChartPoint[] {
   const start = dayStart(date);
+  const dayEnd = start + 86_400_000;
   const end = Math.min(
-    start + 86_400_000 - FIXED_MS,
+    dayEnd - FIXED_MS,
     Math.floor(now / FIXED_MS) * FIXED_MS,
   );
   const byMinute = new Map(points.map((p) => [p.minute, p]));
@@ -71,17 +74,34 @@ export function intradaySeries(
     live &&
     live.minute > end &&
     now - live.minute <= FIXED_MS &&
-    getBeijingDateString(new Date(live.minute)) === date
+    live.minute >= start &&
+    live.minute < dayEnd
   )
     selected.push(live);
+  // Bound memoized values to this calculation, rather than accumulating quotes.
+  const quoteDates = new Map<string, string>();
+  const times = new Map<number | string, string>();
+  function timeAt(value: number | string) {
+    let time = times.get(value);
+    if (time === undefined) {
+      time = beijingTime(value);
+      times.set(value, time);
+    }
+    return time;
+  }
   const series = selected.map((point) => {
-    const quoteDate = point.publishedAt
-      ? getBeijingDateString(new Date(point.publishedAt))
-      : null;
+    let quoteDate: string | null = null;
+    if (point.publishedAt) {
+      quoteDate = quoteDates.get(point.publishedAt) ?? null;
+      if (quoteDate === null) {
+        quoteDate = getBeijingDateString(new Date(point.publishedAt));
+        quoteDates.set(point.publishedAt, quoteDate);
+      }
+    }
     const note = [
       point.kind === "live" ? "最新采集" : "5 分钟采样",
       point.isFallback && point.sourceMinute !== null
-        ? `本次未采到，沿用 ${beijingTime(point.sourceMinute)} 采集值`
+        ? `本次未采到，沿用 ${timeAt(point.sourceMinute)} 采集值`
         : "",
       quoteDate && quoteDate !== date ? `源站报价日期 ${quoteDate}` : "",
     ]
@@ -89,10 +109,10 @@ export function intradaySeries(
       .join("；");
     return {
       date: String(point.minute),
-      label: beijingTime(point.minute),
+      label: timeAt(point.minute),
       sourceTime: point.sourceRequestedAt
-        ? beijingTime(point.sourceRequestedAt)
-        : beijingTime(point.minute),
+        ? timeAt(point.sourceRequestedAt)
+        : timeAt(point.minute),
       huiSell:
         point.priceUnits === null || quoteDate !== date
           ? null
@@ -136,7 +156,7 @@ export function intradaySeries(
     huiSell: previous.huiSell,
     isCarriedForward: true,
     isReference: true,
-    note: `前一有效日最后报价，数据来自 ${previous.date}${previous.publishedAt ? ` ${beijingTime(previous.publishedAt)}` : ""}；仅作起始参考，非当日采样`,
+    note: `前一有效日最后报价，数据来自 ${previous.date}${previous.publishedAt ? ` ${timeAt(previous.publishedAt)}` : ""}；仅作起始参考，非当日采样`,
   };
   return [
     reference,

@@ -1,6 +1,4 @@
 import { GET as sync } from "../src/lib/server/api/sync";
-import { GET as today } from "../src/lib/server/api/today";
-import { GET as history } from "../src/lib/server/api/history";
 import { GET as intraday } from "../src/lib/server/api/intraday";
 
 const routes: Record<
@@ -8,8 +6,6 @@ const routes: Record<
   (request: Request, db: D1Database) => Promise<Response>
 > = {
   "/api/sync": sync,
-  "/api/today": today,
-  "/api/history": history,
   "/api/intraday": intraday,
 };
 
