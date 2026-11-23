@@ -1,33 +1,26 @@
 # AGENTS.md — 工商银行澳币汇率 PWA
 
-## 入口与当前架构
+## 项目定位与工作方式
 
-- [技术方案](docs/blueprint.md)是领域规则、数据和 API 契约的主要说明位置；修改业务前阅读相关章节并核对实现。
-- [README](README.md)维护操作命令，[阶段工作流](docs/phase-workflow.md)维护执行与验收规则。
-- 当前架构为 Vite + React + Cloudflare Workers；运行与发布状态见[运行记录](docs/operations.md)。
+- 少数人私人使用，优先开发简单、容易维护；可接受短暂不可用或数据延迟，不为高可用增加服务、流程和监控。部署目标是 Cloudflare Free，CPU 效率和免费额度适配是核心约束。
+- 日常直接修改，按影响验证并说明结果；不要求阶段计划、进展报告、固定观察周期或恢复演练。复杂改动需要时列简短计划即可。
+- 命令见 [README](README.md)，业务规则见[技术方案](docs/blueprint.md)，遗留问题与恢复依据见[运维备忘](docs/operations.md)。只阅读和更新本次相关内容，不重复维护过程记录。
+- 提交、推送按用户要求执行；已授权 Cloudflare 正式部署及必要资源创建，不重复询问。不要把本地验证或推送成功当成线上已部署。
 
-## 不可破坏的边界
+## 保留的边界
 
-- Cloudflare 单平台；独立 Cron 采集，网站 API 只读 D1。打开、刷新、唤醒或空库不得触发源站抓取，不提供公开强制采集入口。
-- D1 是权威数据，IndexedDB / SW 为离线副本。保留分钟幂等、revision + write_id 原子写入，不引入租约锁或逐轮 D1 诊断写入；详情见技术方案。
-- 不擅自引入 KV、Queues、Durable Objects 等业务服务，不调整账户套餐。
-- 不自动清库。协议不兼容先验证兼容快照再原子重建本地副本；普通错误或报价 revision 改变不得触发清空。保留服务端历史、新版程序资源及有效回退依据。
-- 生产发布先迁移、检查兼容性及初始化，再发布 collector 和网站；失败停止。build / 本地 preview 不操作生产。无法迁移的重建须可恢复备份及显式操作。
-- 用户已授权 Cloudflare 正式部署及必要资源创建；阶段范围内可本地提交。`git push` 仍需明确授权，不把本地通过描述为线上验证。
+- Cloudflare 单平台：独立 Cron 采集，网站 API 只读 D1；页面打开、刷新、唤醒或空库不触发源站抓取，不提供公开采集入口。
+- D1 为权威数据；保留分钟幂等及 revision + write_id 原子写入，不添加租约锁或逐轮 D1 诊断写入。不擅自新增 KV / Queues / Durable Objects 等服务或调整套餐。
+- 不自动清库或删除历史。客户端协议不兼容时，先取得合法兼容快照再原子重建本地副本；普通错误、离线和报价 revision 变化不清空数据。
+- 使用既有部署脚本：迁移、兼容性 / 数据检查成功后再发布 collector 和网站，失败停止；build / preview 不操作生产。破坏性数据重建须先备份并获得明确授权，保留有效恢复依据。
+- 旧现价 HTML 解析器及其测试、样本和依赖暂时保留，等新 API 运行稳定后再决定；不自动回退旧源。
 
-## 实现约束
+## 实现与验证
 
-- TypeScript、pnpm；业务逻辑放 `src/lib/`，按领域、共享契约、客户端和服务端分层；单测与源文件同目录，fixture 本地化，不请求源站。
-- Base UI + Tailwind；基础组件按需用 CLI 生成，位于 `src/components/ui/`。图表沿用 Chart.js，IndexedDB 沿用 idb，SW 沿用 Serwist 及对应集成的 defaultCache。
-- 当前 JSON 现价与部署前 Node 历史校准的边界见技术方案；Cron 不导入历史 HTML 解析依赖，旧现价解析器不自动回退。
-- binding 类型从 Wrangler 配置生成；浏览器、SW、网站 Worker、collector、Node 脚本区分环境，不手写复制 Env。
-- 只跟随系统亮暗主题。同步中保留已有值和结构，使用行内提示；图表返回前台主动 resize。
-- 同时为 flex 子元素与容器时默认加 min-h-0；Chart.js 旁不条件添加占布局空间的 flex 说明，避免画布抖动。
-- 新依赖选适配的稳定版；有兼容性原因保留旧版时注明。变更保持既定范围，不顺便扩展业务或重做交互。
-
-## 构建与运行环境
-
-- 使用 Cloudflare Vite 插件运行网站，Wrangler 配置是 binding 与生产目标的主要来源。Collector 独立构建，网站发布子进程的 CI 覆盖变量不得污染 collector。
-- SW 使用 @serwist/vite；保持 /sw.js 和 scope 稳定，复用 defaultCache，预缓存排除 /_headers 与 /_redirects。开发模式不注册，生产预览验证升级与离线。
-- 浏览器主题色在 index.html 按系统主题定义，manifest 只设静态主题色。字体自托管，不依赖运行时外部字体请求。
-- 测试不请求源站；页面回归用 Chromium 和 API mock，SW 另验生产接管。变更范围对应的验证要求见阶段工作流。
+- TypeScript + pnpm，Vite + React + Cloudflare Workers。业务逻辑位于 `src/lib/`，沿用 domain / contracts / client / server 分层；Cron 不导入历史 HTML 依赖，历史校准在部署前 Node 脚本运行。
+- 沿用 Base UI + Tailwind（基础组件按需用 CLI 生成）、Chart.js、idb、Serwist defaultCache；binding 类型从 Wrangler 配置生成，浏览器 / SW / Worker / Node 环境分开检查。collector 发布不继承网站 CI 名称覆盖变量。
+- 保持 Worker 热路径轻量：现价 JSON 解析、索引 / 增量查询、有界清理，避免全量扫描、重复序列化与日期格式化。历史 HTML 校准留在部署前 Node 脚本，不移入 Cron。涉及这些路径或运行时依赖的改动，按需比较 CPU、D1 读写与包体；线上 CPU 用实际指标确认，不以请求耗时或包体代替。无需为纯文档或无关界面改动跑性能测试。
+- 只跟随系统亮暗主题；字体自托管；同步保留已有值和结构。flex 子项兼容器加 min-h-0，Chart.js 旁不条件插入占位说明，返回前台主动 resize。
+- SW 保持 /sw.js 和根 scope，预缓存排除 /_headers 与 /_redirects；开发模式不注册，离线功能用生产预览验证。
+- 验证随改动选择：文档检查格式、链接与命令；代码跑类型、lint 和相关单测；D1 改动跑集成测试；界面改动跑相关 Chromium 用例；构建 / 部署改动检查构建及受影响 Worker 打包；SW / 协议改动验证接管、离线或升级。无需每次跑全套，也不要求每次生产演练。
+- 单测同目录、fixture 本地化，测试不请求源站；页面测试 mock API，本地 D1 与生产隔离。只报告实际执行的检查及未验证项。

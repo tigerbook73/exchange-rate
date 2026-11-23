@@ -1,17 +1,14 @@
 # 工商银行澳币汇率 PWA
 
-展示工商银行澳大利亚元现汇卖出价（个人购汇价）、当日分时与每日历史。今日未发布报价时，显示最近有效报价日并标明日期。
+供少数人私人使用，展示澳元现汇卖出价、分时与每日历史。优先保持开发和操作简单，可接受短暂不可用或数据延迟；部署目标为 Cloudflare Free，仍重视 Worker CPU 效率和免费额度适配。
 
-Vite + React 前端和只读 API 部署到同一个 Cloudflare Worker；独立采集 Worker 每分钟获取现价，D1 保存权威数据。打开、刷新和唤醒 App 均不抓取源站，IndexedDB 与 Serwist 保留离线副本。
+Vite + React 与只读 API 共用网站 Worker；独立 Cron 每分钟采集，D1 保存数据，IndexedDB / Serwist 提供离线副本。
 
-- [技术方案与数据契约](docs/blueprint.md)
-- [开发约束](AGENTS.md)
-- [阶段工作流](docs/phase-workflow.md)
-- [运行状态、回退依据与待办](docs/operations.md)
+[开发约定](AGENTS.md) · [数据与 API 规则](docs/blueprint.md) · [运维备忘](docs/operations.md)
 
-## 本地运行
+## 本地开发
 
-使用 Node.js 24、pnpm 11，依赖由 lockfile 锁定。
+Node.js 24、pnpm 11：
 
 ```bash
 corepack pnpm@11 install --frozen-lockfile
@@ -21,27 +18,19 @@ pnpm db:demo
 pnpm dev
 ```
 
-打开 http://localhost:3000 。端口被占用时可用 `pnpm dev --port 3001`。开发服务通过 Cloudflare Vite 插件在真实 Workers 运行时执行 API，使用本地 D1，不连接生产；开发模式不注册 SW。
+打开 http://localhost:3000 ，换端口可用 `pnpm dev --port 3001`。开发模式使用本地 D1，不注册 SW。演示初始化只写空库，不请求源站；本地数据在忽略目录 `.wrangler/state/`，管理脚本与开发服务共用该库。
 
-`db:demo` 仅为空库写入固定的一年历史和三日分时演示快照，不请求源站；演示库不能混入真实数据。需要真实本地数据时显式执行：
+需要真实本地数据时，用以下命令替代演示数据；`db:reset` **会删除本地业务数据**，不访问生产：
 
 ```bash
-# 仅清理本地业务数据，不访问云端
 pnpm db:reset
-pnpm db:backfill
-pnpm db:collect
-pnpm collector:local
+pnpm db:backfill       # 抓取并校准历史
+pnpm collector:local   # 立即采一次，此后每分钟采集，Ctrl+C 停止
 ```
 
-`db:backfill` 校准历史，`db:collect` 采一次现价；`collector:local` 立即采集一次，随后每分钟采集现价，Ctrl+C 停止。它不自动运行历史校准，也不模拟云端 Cron 的调度可靠性。
+## 检查与预览
 
-`pnpm collector:dev` 启动独立采集 Worker 的本地调试，端口 8787；通过 `/__scheduled` 显式触发，不会自行每分钟执行。线上没有公开采集端点。
-
-`pnpm db:repair-gaps` 根据已有记录修复本地历史缺日，不请求源站、不推进历史确认游标；生产对应命令为 `pnpm db:repair-gaps:remote`。补缺语义见技术方案。
-
-网站与管理脚本共用 `.wrangler/state/v3` 内的本地模拟库：Vite / Wrangler 的持久化根路径为 `.wrangler/state`，`getPlatformProxy` 使用 `.wrangler/state/v3`。该目录不纳入 Git。
-
-## 构建与验证
+按改动选择检查，不必每次跑全套：
 
 ```bash
 pnpm format:check
@@ -50,39 +39,47 @@ pnpm typecheck
 pnpm test
 pnpm test:e2e
 pnpm build
-pnpm exec wrangler deploy --dry-run --outdir .wrangler/website-check
-node scripts/deploy-collector.mjs --dry-run --outdir .wrangler/collector-check
-pnpm cf-typegen
 ```
 
-类型检查覆盖浏览器、网站 Worker、SW、collector、Node 工具和测试；binding 类型从 Wrangler 配置生成。D1 集成测试使用隔离的临时本地数据库，需要回环端口权限。Chromium 页面测试 mock API，不请求源站；若自动启动服务受限，可先运行 `pnpm dev` 再测试。指定已有服务可用 `PLAYWRIGHT_BASE_URL=http://localhost:3001 pnpm exec playwright test e2e/rate-page.spec.ts`。
+单测使用 Node 和隔离 D1，页面测试使用 Chromium / API mock，不请求源站；本地服务与 D1 测试需要回环端口权限。修改 Wrangler bindings 后运行 `pnpm cf-typegen`。
 
-构建输出为 `dist/client` 和 `dist/icbc_rate`；Wrangler 根据生成的部署配置发布产物。collector 独立构建，不受网站 CI 名称 / tag 覆盖。不要同时重建产物和运行依赖这些产物的生产预览测试。
-
-PWA 需要生产模式验证：
+验证 PWA / 离线时，先运行 `pnpm preview`，在另一个终端执行：
 
 ```bash
-pnpm preview
-# 或复用已构建产物
-pnpm exec vite preview --port 8788
+PLAYWRIGHT_BASE_URL=http://localhost:8788 pnpm exec playwright test
 ```
 
-打开 http://localhost:8788 ，先在线加载、等待 SW 接管，再在线重载一次，最后断网重载。可运行 `PLAYWRIGHT_BASE_URL=http://localhost:8788 pnpm exec playwright test e2e/pwa.spec.ts`；该用例在默认开发测试中跳过。普通离线或 503 不清空本地数据；API 协议不兼容时的一次刷新和兼容快照重建规则见技术方案。
+该命令覆盖页面和真实 SW 接管 / 离线重载；普通开发测试跳过 SW 用例。手动检查可先在线加载、等待接管、在线重载，再断网重载。已有构建用 `pnpm start` 预览，不要在测试期间重建产物。
 
-## 正式部署
+## 部署
 
-正式入口 https://icbc-rate.tigerbook.top ，网站 `icbc-rate`、采集 `icbc-rate-collector`、D1 `icbc-rate`。账号和资源 ID 在 Wrangler 配置中，collector 不开放公开访问。
+正式入口 https://icbc-rate.tigerbook.top 。网站 `icbc-rate`、采集 `icbc-rate-collector`、D1 `icbc-rate`；目标 ID 以两个 Wrangler 配置为准。
 
 ```bash
-# 生产结构升级前导出备份，文件保存在忽略目录
-pnpm exec wrangler d1 export DB --remote --output .wrangler/backups/before-deploy.sql
 pnpm run deploy
-# 仅发布 collector，也会先迁移和检查数据
+# 仅发布采集 Worker
 pnpm run deploy:collector
 ```
 
-统一发布顺序：Vite 构建 → 远程 migration → Node.js 兼容 / 现价 / 历史校准及就绪检查 → collector → 网站。失败停止发布，不清库。正常 build / preview 不连接生产；直接用原始发布命令会绕过数据检查。`pnpm upload` 会上传版本，不是本地预览。
+脚本先迁移远程 D1、检查兼容性并初始化 / 校准数据，再发布 collector 和网站；失败即停止。build / preview 不连接生产，`pnpm upload` 会上传网站版本且绕过部署前数据检查，不作为日常发布入口。
 
-Cloudflare Builds 只在网站配置生产流水线：Build command 留空，Deploy command 为 `pnpm run deploy`，项目根目录运行，构建变量 `PNPM_VERSION=11`。构建令牌需目标账号 D1 写权限和两个 Worker 发布权限；collector 无需第二条流水线。预览分支不得使用生产发布命令。控制台实际设置与仍待核实事项见运行状态文档，不能把本地配置当作已修改控制台。
+生产数据库结构升级或破坏性操作前导出备份，不要求每次普通发布做恢复演练：
 
-本地提交、Git 推送和 Cloudflare 发布是独立操作；`git push` 需要明确授权。旧框架 R2 桶保留供回退，新代码不使用它；不自动删除远程资源或历史部署。
+```bash
+pnpm exec wrangler d1 export DB --remote --output .wrangler/backups/before-deploy.sql
+```
+
+如使用 Cloudflare Builds，只为网站配置一条流水线：Build command 留空，Deploy command 为 `pnpm run deploy`，变量 `PNPM_VERSION=11`；令牌需 D1 写权限和两个 Worker 发布权限。预览分支不要执行生产部署命令。Git 推送与实际部署成功分别确认。
+
+## 偶尔使用的命令
+
+| 用途                                            | 命令                                                                             |
+| ----------------------------------------------- | -------------------------------------------------------------------------------- |
+| 本地采一次现价                                  | `pnpm db:collect`                                                                |
+| 检查数据结构 / 生产就绪状态                     | `pnpm db:check` / `pnpm db:check:remote`                                         |
+| 用已有数据修复缺日，不请求源站                  | `pnpm db:repair-gaps` / `pnpm db:repair-gaps:remote`                             |
+| 调试 Cron（端口 8787，显式请求 `/__scheduled`） | `pnpm collector:dev`                                                             |
+| 网站打包检查                                    | `pnpm exec wrangler deploy --dry-run --outdir .wrangler/website-check`           |
+| 采集打包检查                                    | `node scripts/deploy-collector.mjs --dry-run --outdir .wrangler/collector-check` |
+
+带 `:remote` 的命令访问生产；`collector:dev` 不会自行每分钟触发。构建产物在 `dist/client`、`dist/icbc_rate`，collector 独立打包。
