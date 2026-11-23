@@ -79,7 +79,3 @@ export interface SyncResponse {
   deletedPoints: number[];
   state: CollectionState;
 }
-
-export interface ResetResponse {
-  resetRequired: true;
-}

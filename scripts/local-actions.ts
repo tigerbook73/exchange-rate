@@ -29,10 +29,6 @@ export async function run(db: D1Database, mode: string) {
     );
     return;
   }
-  if (mode === "tick") {
-    await collectMinute(db);
-    return;
-  }
   if (mode === "reset") {
     await db.batch(
       [

@@ -83,7 +83,7 @@ export function RangeToggle({
       </Button>
       <div
         ref={viewport}
-        className="min-w-0 overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="min-w-0 overflow-x-auto overscroll-x-contain scrollbar-none [&::-webkit-scrollbar]:hidden"
       >
         <div
           ref={content}

@@ -2,13 +2,6 @@
 
 # dependencies
 /node_modules
-/.pnp
-.pnp.*
-.yarn/*
-!.yarn/patches
-!.yarn/plugins
-!.yarn/releases
-!.yarn/versions
 
 # testing
 /coverage
@@ -17,13 +10,8 @@
 /blob-report
 /playwright/.cache
 
-# serwist (generated service worker, build artifact)
-/public/sw.js
-/public/sw.js.map
-/public/swe-worker*
-
 # production
-/build
+/dist/
 
 # misc
 .DS_Store
@@ -34,8 +22,6 @@
 
 # debug
 npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 .pnpm-debug.log*
 
 # env files (can opt-in for committing if needed)
@@ -48,6 +34,3 @@ yarn-error.log*
 
 # typescript
 *.tsbuildinfo
-
-# Vite build output
-/dist/

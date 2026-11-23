@@ -50,7 +50,7 @@ try {
       "Local real-source collection every minute. Press Ctrl+C to stop. No Cloudflare deployment.",
     );
     while (!stop.signal.aborted) {
-      await run(proxy.env.DB, "tick");
+      await run(proxy.env.DB, "collect");
       try {
         await delay(60_000 - (Date.now() % 60_000) + 1000, null, {
           signal: stop.signal,

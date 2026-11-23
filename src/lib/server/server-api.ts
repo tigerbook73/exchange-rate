@@ -1,20 +1,6 @@
-import { readSync, ResetRequired } from "./server-store";
-import type { SyncResponse } from "../contracts/server-types";
-import { DatabaseSchemaError } from "./db-schema";
-
-export async function queryServer(
-  db: D1Database,
-  cursor: string | null = null,
-): Promise<SyncResponse> {
-  return readSync(db, cursor);
-}
+import { ResetRequired } from "./server-store";
 
 export function queryError(error: unknown) {
-  if (error instanceof DatabaseSchemaError)
-    return Response.json(
-      { error: "database_upgrade_required" },
-      { status: 503, headers: { "Cache-Control": "no-store" } },
-    );
   if (error instanceof ResetRequired)
     return Response.json(
       { resetRequired: true },

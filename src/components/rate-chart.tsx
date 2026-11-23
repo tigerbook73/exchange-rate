@@ -21,16 +21,7 @@ ChartJS.register(
   Tooltip,
 );
 
-// Fast Refresh can retain the old globally registered canvas plugin after
-// switching to a local overlay plugin. Remove it from existing dev charts.
-if (import.meta.env.DEV) {
-  ChartJS.unregister({ id: "crosshair" });
-}
-
-// Reused from the app's existing shadcn theme tokens (see globals.css), plus
-// one deliberate accent hue for the data line — validated against both
-// surfaces with the dataviz skill's palette script (#2563eb on #ffffff,
-// #3b82f6 on #0a0a0a both pass contrast + lightness-band checks).
+// Grid and text colors follow the theme tokens in styles.css.
 const PALETTE = {
   light: {
     line: "#2563eb",

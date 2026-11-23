@@ -1,4 +1,5 @@
-import { queryError, queryServer, serverJson } from "@/lib/server/server-api";
+import { queryError, serverJson } from "@/lib/server/server-api";
+import { readSync } from "@/lib/server/server-store";
 import { SYNC_SCHEMA } from "@/lib/contracts/server-types";
 
 export async function GET(request: Request, db: D1Database) {
@@ -14,7 +15,7 @@ export async function GET(request: Request, db: D1Database) {
       { status: 426, headers: { "Cache-Control": "no-store" } },
     );
   try {
-    const data = await queryServer(db, params.get("cursor"));
+    const data = await readSync(db, params.get("cursor"));
     if (!data.state.lastSuccess && !data.state.historyDate)
       return queryError(new Error("Not initialized"));
     return serverJson(data);
