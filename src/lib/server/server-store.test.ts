@@ -22,6 +22,7 @@ import { advanceCollection } from "../domain/intraday";
 import {
   emptyCollectionState,
   type SyncResponse,
+  type IntradayPoint,
 } from "../contracts/server-types";
 import type { RateRecord } from "../contracts/rate-types";
 import { repairDailyGaps } from "./daily-gap-repair";
@@ -47,6 +48,7 @@ import { fetchIcbcToday, parseIcbcToday } from "./icbc-today";
 import { GET as handleSync } from "./api/sync";
 import { GET as handleToday } from "./api/today";
 import { GET as handleHistory } from "./api/history";
+import { GET as handleIntraday } from "./api/intraday";
 import { handleApi } from "../../../worker/index";
 
 let proxy: Awaited<ReturnType<typeof getPlatformProxy<CloudflareEnv>>>;
@@ -128,6 +130,184 @@ afterAll(async () => {
 });
 
 describe("D1 persistence and read-only API", () => {
+  it("reads only the requested Beijing day in order with one indexed snapshot query", async () => {
+    await seedDaily([realDaily("2026-11-21")]);
+    const times = [
+      "2026-11-21T23:55:00+08:00",
+      "2026-11-20T00:00:00+08:00",
+      "2026-11-22T00:00:00+08:00",
+      "2026-11-21T00:00:00+08:00",
+      "2026-11-20T23:55:00+08:00",
+      "2026-11-19T23:55:00+08:00",
+    ];
+    const points: IntradayPoint[] = times.map((time, i) => ({
+      minute: Date.parse(time),
+      kind: "fixed",
+      priceUnits: i === 0 ? null : 47500,
+      sourceMinute: i === 0 ? null : Date.parse(time) - 60000,
+      sourceRequestedAt: i === 0 ? null : time,
+      publishedAt: i === 0 ? null : time,
+      isFallback: i !== 0,
+    }));
+    await db.batch(
+      points.map((point, i) =>
+        db
+          .prepare("INSERT INTO intraday_points VALUES (?, ?, ?, 1)")
+          .bind(point.minute, times[i].slice(0, 10), JSON.stringify(point)),
+      ),
+    );
+    const queries: string[] = [];
+    const tracked = new Proxy(db, {
+      get(target, key, receiver) {
+        if (key === "prepare")
+          return (sql: string) => {
+            queries.push(sql);
+            return target.prepare(sql);
+          };
+        return Reflect.get(target, key, receiver);
+      },
+    });
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      const response = await handleIntraday(
+        new Request("http://localhost/api/intraday?date=2026-11-21"),
+        tracked,
+      );
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Cache-Control")).toBe(
+        "public, s-maxage=15, stale-while-revalidate=15",
+      );
+      expect(await response.json()).toEqual({
+        date: "2026-11-21",
+        points: [points[3], points[0]],
+        live: null,
+      });
+      expect(queries).toHaveLength(1);
+      const plan = await db
+        .prepare(`EXPLAIN QUERY PLAN ${queries[0]}`)
+        .bind("2026-11-21", "2026-11-20")
+        .all<{ detail: string }>();
+      expect(
+        plan.results.some(
+          (row) =>
+            row.detail.includes("SEARCH intraday_points") &&
+            row.detail.includes("intraday_date"),
+        ),
+      ).toBe(true);
+      expect(
+        plan.results.some((row) => /daily_rates|sync_changes/.test(row.detail)),
+      ).toBe(false);
+      const oldest = await handleIntraday(
+        new Request("http://localhost/api/intraday?date=2026-11-20"),
+        db,
+      );
+      expect(oldest.status).toBe(200);
+      expect(await oldest.json()).toMatchObject({
+        points: [points[1], points[4]],
+      });
+      expect(fetchSourceHtml).not.toHaveBeenCalled();
+      expect(fetchIcbcToday).not.toHaveBeenCalled();
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it.each([
+    ["2026-11-22T10:04:00+08:00", "2026-11-22T10:04:05+08:00", null, true],
+    ["2026-11-22T10:04:00+08:00", "2026-11-22T10:05:00+08:00", null, false],
+    ["2026-11-22T10:00:00+08:00", "2026-11-22T10:04:05+08:00", null, false],
+    ["2026-11-22T09:59:00+08:00", "2026-11-22T10:04:05+08:00", null, false],
+    ["2026-11-22T00:00:00+08:00", "2026-11-22T00:01:05+08:00", null, false],
+    ["2026-11-22T00:01:00+08:00", "2026-11-22T00:01:05+08:00", null, true],
+    [
+      "2026-11-22T00:01:00+08:00",
+      "2026-11-22T00:01:05+08:00",
+      "2026-11-21",
+      false,
+    ],
+    [
+      "2026-11-21T23:59:00+08:00",
+      "2026-11-22T00:01:05+08:00",
+      "2026-11-21",
+      false,
+    ],
+  ])(
+    "preserves live expiry and day boundaries: %s at %s for %s",
+    async (minute, at, date, included) => {
+      const live: IntradayPoint = {
+        minute: Date.parse(minute),
+        kind: "live",
+        priceUnits: 47500,
+        sourceMinute: Date.parse(minute),
+        sourceRequestedAt: minute,
+        publishedAt: minute,
+        isFallback: false,
+      };
+      await db
+        .prepare("UPDATE collection_state SET state_json = ? WHERE id = 1")
+        .bind(
+          JSON.stringify({
+            ...emptyCollectionState(),
+            historyDate: "2026-11-21",
+            live,
+          }),
+        )
+        .run();
+      const clock = vi.spyOn(Date, "now").mockReturnValue(Date.parse(at));
+      try {
+        const response = await handleIntraday(
+          new Request(
+            `http://localhost/api/intraday${date ? `?date=${date}` : ""}`,
+          ),
+          db,
+        );
+        expect(response.status).toBe(200);
+        expect(await response.json()).toEqual({
+          date: date ?? "2026-11-22",
+          points: [],
+          live: included ? live : null,
+        });
+      } finally {
+        clock.mockRestore();
+      }
+    },
+  );
+
+  it("preserves intraday validation, retention, empty-database and failure responses", async () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now);
+    try {
+      const request = (date: string) =>
+        new Request(`http://localhost/api/intraday?date=${date}`);
+      expect((await handleIntraday(request("2026-11-22"), db)).status).toBe(
+        503,
+      );
+      await seedDaily([realDaily("2026-11-21")]);
+      for (const date of ["bad", "2026-02-30"]) {
+        expect((await handleIntraday(request(date), db)).status).toBe(400);
+      }
+      for (const date of ["2026-11-19", "2026-11-23"]) {
+        const response = await handleIntraday(request(date), db);
+        expect(response.status).toBe(410);
+        expect(response.headers.get("Cache-Control")).toBe("no-store");
+        expect(await response.json()).toEqual({
+          error: "Date outside retention",
+          retainedFrom: "2026-11-20",
+        });
+      }
+      await db.prepare("DELETE FROM collection_state WHERE id = 1").run();
+      const unavailable = await handleIntraday(request("2026-11-22"), db);
+      expect(unavailable.status).toBe(503);
+      expect(unavailable.headers.get("Cache-Control")).toBe("no-store");
+      expect(fetchSourceHtml).not.toHaveBeenCalled();
+      expect(fetchIcbcToday).not.toHaveBeenCalled();
+    } finally {
+      await db
+        .prepare("INSERT OR IGNORE INTO collection_state (id) VALUES (1)")
+        .run();
+      clock.mockRestore();
+    }
+  });
+
   it("fills yesterday at Beijing midnight even when collection fails, without extra round trips", async () => {
     await seedDaily([realDaily("2026-11-21")]);
     const at = Date.parse("2026-11-23T00:00:05+08:00");

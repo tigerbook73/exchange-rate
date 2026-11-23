@@ -24,6 +24,44 @@ interface SnapshotRow extends MetaRow {
 }
 export class ResetRequired extends Error {}
 
+function parseCurrentState(stateJson: string, from: string, now: number) {
+  const state: CollectionState = {
+    ...emptyCollectionState(),
+    ...JSON.parse(stateJson),
+  };
+  if (
+    state.live &&
+    (state.live.minute < dayStart(from) ||
+      state.live.minute <= Math.floor(now / 300000) * 300000 ||
+      now - state.live.minute > 300000)
+  )
+    state.live = null;
+  return state;
+}
+
+/** Read only the requested day's points and state from one database snapshot. */
+export async function readIntraday(
+  db: D1Database,
+  date: string,
+  now = Date.now(),
+) {
+  const from = retainedDate(now);
+  const row = await db
+    .prepare(
+      `SELECT state_json,
+    (SELECT json_group_array(json(value_json)) FROM (SELECT value_json FROM intraday_points WHERE date = ? AND date >= ? ORDER BY minute)) AS points_json
+    FROM collection_state WHERE id = 1`,
+    )
+    .bind(date, from)
+    .first<{ state_json: string; points_json: string }>();
+  if (!row) throw new Error("Database not initialized");
+  return {
+    retainedFrom: from,
+    points: JSON.parse(row.points_json) as IntradayPoint[],
+    state: parseCurrentState(row.state_json, from, now),
+  };
+}
+
 export async function readMeta(db: D1Database, fillThrough?: string) {
   // Read the tail's real anchor only when a new Beijing day needs maintenance,
   // in the same snapshot and round trip as the collection state.
@@ -86,17 +124,7 @@ export async function readSync(
       revision > meta.revision)
   )
     throw new ResetRequired();
-  const state: CollectionState = {
-    ...emptyCollectionState(),
-    ...JSON.parse(meta.state_json),
-  };
-  if (
-    state.live &&
-    (state.live.minute < dayStart(from) ||
-      state.live.minute <= Math.floor(now / 300000) * 300000 ||
-      now - state.live.minute > 300000)
-  )
-    state.live = null;
+  const state = parseCurrentState(meta.state_json, from, now);
   return {
     schema: SYNC_SCHEMA,
     datasetId: meta.dataset_id,
