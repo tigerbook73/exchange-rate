@@ -103,10 +103,7 @@ test("loads the current valid date without a three-day selector", async ({
   ).toHaveAttribute("href", "https://www.kylc.com/huilv/d-icbc-aud.html");
   await expect(
     page.getByRole("link", { name: "工商银行网站", exact: true }),
-  ).toHaveAttribute(
-    "href",
-    "https://www.icbc.com.cn/forex/foreignEx/forex.html",
-  );
+  ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "30 天", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
