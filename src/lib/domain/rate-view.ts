@@ -1,5 +1,5 @@
 import { addDays, getBeijingDateString } from "./date";
-import type { RateRecord } from "./rates-db";
+import type { RateRecord } from "../contracts/rate-types";
 
 export type HistoryRange = "7d" | "30d" | "90d" | "180d" | "365d";
 export type RangeOption = "1d" | HistoryRange;

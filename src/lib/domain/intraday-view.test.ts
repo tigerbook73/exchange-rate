@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { displayQuoteDate, intradaySeries } from "./intraday-view";
-import { emptyCollectionState, type IntradayPoint } from "./server-types";
+import {
+  emptyCollectionState,
+  type IntradayPoint,
+} from "../contracts/server-types";
 
 const date = "2026-11-22";
 function stateWithPublication(publishedAt: string) {

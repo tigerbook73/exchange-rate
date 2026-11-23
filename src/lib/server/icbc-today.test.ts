@@ -9,7 +9,7 @@ import {
 import { fetchLegacyToday } from "./legacy-today";
 
 const fixture = JSON.parse(
-  readFileSync(resolve("src/lib/__fixtures__/icbc-latest.json"), "utf8"),
+  readFileSync(resolve("src/lib/server/__fixtures__/icbc-latest.json"), "utf8"),
 );
 const quote = {
   priceUnits: 44331,
@@ -112,7 +112,7 @@ describe("ICBC current quote", () => {
   });
   it("retains the legacy implementation for explicit comparison", async () => {
     const html = readFileSync(
-      resolve("src/lib/__fixtures__/b-icbc.html"),
+      resolve("src/lib/server/__fixtures__/b-icbc.html"),
       "utf8",
     );
     expect(

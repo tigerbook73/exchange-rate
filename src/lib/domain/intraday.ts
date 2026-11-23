@@ -5,7 +5,7 @@ import {
   type CollectionState,
   type IntradayPoint,
   type QuoteSample,
-} from "./server-types";
+} from "../contracts/server-types";
 
 export function minuteOf(time: number): number {
   return Math.floor(time / MINUTE_MS) * MINUTE_MS;

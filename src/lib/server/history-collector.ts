@@ -1,7 +1,7 @@
-import { addDays, getBeijingDateString } from "./date";
-import { dailyGapFills } from "./daily-gaps";
+import { addDays, getBeijingDateString } from "../domain/date";
+import { dailyGapFills } from "../domain/daily-gaps";
 import { parseHistoryHtml } from "./parse-history";
-import type { RateRecord } from "./rates-db";
+import type { RateRecord } from "../contracts/rate-types";
 import { commitCollection, readMeta } from "./server-store";
 import { fetchSourceHtml, HISTORY_SOURCE_URL } from "./sources";
 

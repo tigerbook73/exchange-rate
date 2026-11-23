@@ -1,6 +1,6 @@
-import { getBeijingDateString, isValidDate } from "./date";
+import { getBeijingDateString, isValidDate } from "../domain/date";
 import type { RatesDb } from "./rates-db";
-import { SYNC_SCHEMA, type SyncResponse } from "./server-types";
+import { SYNC_SCHEMA, type SyncResponse } from "../contracts/server-types";
 import { ApiUpgradeRequired } from "./api-upgrade";
 
 export function validateSync(data: SyncResponse): void {

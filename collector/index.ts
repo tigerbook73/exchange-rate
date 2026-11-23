@@ -1,4 +1,4 @@
-import { collectMinute } from "../src/lib/server-collector";
+import { collectMinute } from "../src/lib/server/server-collector";
 
 export default {
   async scheduled(controller: ScheduledController, env: CollectorEnv) {

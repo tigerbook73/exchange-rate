@@ -1,4 +1,4 @@
-import { parsePublishedAt } from "./date";
+import { parsePublishedAt } from "../domain/date";
 import type { TodayQuote } from "./icbc-today";
 import { parseTodayHtml } from "./parse-today";
 import { fetchSourceHtml, TODAY_SOURCE_URL } from "./sources";

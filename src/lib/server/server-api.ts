@@ -1,6 +1,6 @@
 import { getCloudflareContext } from "@opennextjs/cloudflare";
 import { readSync, ResetRequired } from "./server-store";
-import type { SyncResponse } from "./server-types";
+import type { SyncResponse } from "../contracts/server-types";
 import { DatabaseSchemaError } from "./db-schema";
 
 export async function queryServer(

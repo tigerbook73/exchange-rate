@@ -1,11 +1,7 @@
-import type { HistoryResponse, TodayResponse } from "./api-types";
-import { addDays, getBeijingDateString } from "./date";
-import {
-  getAllRates,
-  upsertRates,
-  type RateRecord,
-  type RatesDb,
-} from "./rates-db";
+import type { RateRecord } from "../contracts/rate-types";
+import type { HistoryResponse, TodayResponse } from "../contracts/api-types";
+import { addDays, getBeijingDateString } from "../domain/date";
+import { getAllRates, upsertRates, type RatesDb } from "./rates-db";
 
 /**
  * Merges /api/today and /api/history into RateRecord[]. Today's row is only

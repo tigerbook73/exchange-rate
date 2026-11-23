@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { RANGE_LABELS, type RangeOption } from "@/lib/rate-view";
+import { RANGE_LABELS, type RangeOption } from "@/lib/domain/rate-view";
 
 const RANGE_OPTIONS: RangeOption[] = ["1d", "7d", "30d", "90d", "180d", "365d"];
 

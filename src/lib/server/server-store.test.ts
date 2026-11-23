@@ -18,9 +18,9 @@ import {
   readSync,
   ResetRequired,
 } from "./server-store";
-import { advanceCollection } from "./intraday";
-import { emptyCollectionState } from "./server-types";
-import type { RateRecord } from "./rates-db";
+import { advanceCollection } from "../domain/intraday";
+import { emptyCollectionState } from "../contracts/server-types";
+import type { RateRecord } from "../contracts/rate-types";
 import { repairDailyGaps } from "./daily-gap-repair";
 import { checkDatabaseCompatibility, DatabaseSchemaError } from "./db-schema";
 
@@ -45,9 +45,9 @@ import { fetchSourceHtml } from "./sources";
 import { collectMinute } from "./server-collector";
 import { collectHistory } from "./history-collector";
 import { fetchIcbcToday, parseIcbcToday } from "./icbc-today";
-import { GET as getSync } from "../app/api/sync/route";
-import { GET as getToday } from "../app/api/today/route";
-import { GET as getHistory } from "../app/api/history/route";
+import { GET as getSync } from "../../app/api/sync/route";
+import { GET as getToday } from "../../app/api/today/route";
+import { GET as getHistory } from "../../app/api/history/route";
 
 let proxy: Awaited<ReturnType<typeof getPlatformProxy<CloudflareEnv>>>;
 let db: D1Database;
@@ -424,7 +424,10 @@ describe("D1 persistence and read-only API", () => {
   it("collects real-shaped fixtures only through explicit collector entrypoints", async () => {
     const quote = parseIcbcToday(
       JSON.parse(
-        readFileSync(resolve("src/lib/__fixtures__/icbc-latest.json"), "utf8"),
+        readFileSync(
+          resolve("src/lib/server/__fixtures__/icbc-latest.json"),
+          "utf8",
+        ),
       ),
     );
     const fetchQuote = vi.fn(async () => quote);
@@ -436,7 +439,7 @@ describe("D1 persistence and read-only API", () => {
       "2026-11-21T04:08:43+08:00",
     );
     const historyHtml = readFileSync(
-      resolve("src/lib/__fixtures__/d-icbc-aud.html"),
+      resolve("src/lib/server/__fixtures__/d-icbc-aud.html"),
       "utf8",
     );
     await collectHistory(db, async () => historyHtml);
@@ -509,11 +512,14 @@ describe("D1 persistence and read-only API", () => {
     const clock = vi.spyOn(Date, "now").mockReturnValue(now);
     const quote = parseIcbcToday(
       JSON.parse(
-        readFileSync(resolve("src/lib/__fixtures__/icbc-latest.json"), "utf8"),
+        readFileSync(
+          resolve("src/lib/server/__fixtures__/icbc-latest.json"),
+          "utf8",
+        ),
       ),
     );
     const historyHtml = readFileSync(
-      resolve("src/lib/__fixtures__/d-icbc-aud.html"),
+      resolve("src/lib/server/__fixtures__/d-icbc-aud.html"),
       "utf8",
     );
     try {
@@ -602,7 +608,10 @@ describe("D1 persistence and read-only API", () => {
     });
     const quote = parseIcbcToday(
       JSON.parse(
-        readFileSync(resolve("src/lib/__fixtures__/icbc-latest.json"), "utf8"),
+        readFileSync(
+          resolve("src/lib/server/__fixtures__/icbc-latest.json"),
+          "utf8",
+        ),
       ),
     );
     try {
@@ -626,7 +635,10 @@ describe("D1 persistence and read-only API", () => {
     const clock = vi.spyOn(Date, "now").mockReturnValue(now);
     const quote = parseIcbcToday(
       JSON.parse(
-        readFileSync(resolve("src/lib/__fixtures__/icbc-latest.json"), "utf8"),
+        readFileSync(
+          resolve("src/lib/server/__fixtures__/icbc-latest.json"),
+          "utf8",
+        ),
       ),
     );
     let start!: () => void;
@@ -725,7 +737,10 @@ describe("D1 persistence and read-only API", () => {
     const clock = vi.spyOn(Date, "now").mockReturnValue(now);
     const quote = parseIcbcToday(
       JSON.parse(
-        readFileSync(resolve("src/lib/__fixtures__/icbc-latest.json"), "utf8"),
+        readFileSync(
+          resolve("src/lib/server/__fixtures__/icbc-latest.json"),
+          "utf8",
+        ),
       ),
     );
     try {

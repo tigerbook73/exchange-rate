@@ -2,7 +2,7 @@
 
 import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useInstallPrompt } from "@/lib/use-install-prompt";
+import { useInstallPrompt } from "@/lib/client/use-install-prompt";
 
 /** Renders nothing unless the browser actually offered an install prompt
  * (Chromium/Android). iOS Safari has no such API — those users add the app

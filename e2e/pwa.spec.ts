@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
-import { addDays, getBeijingDateString } from "../src/lib/date";
+import { addDays, getBeijingDateString } from "../src/lib/domain/date";
 import {
   emptyCollectionState,
   type SyncResponse,
-} from "../src/lib/server-types";
+} from "../src/lib/contracts/server-types";
 
 test("production service worker controls the page and reloads cached data offline", async ({
   page,

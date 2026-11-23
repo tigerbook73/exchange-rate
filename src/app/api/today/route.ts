@@ -1,4 +1,4 @@
-import { queryError, queryServer, serverJson } from "@/lib/server-api";
+import { queryError, queryServer, serverJson } from "@/lib/server/server-api";
 
 export const dynamic = "force-dynamic";
 

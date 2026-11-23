@@ -13,7 +13,7 @@ import {
 import { useTheme } from "next-themes";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Line } from "react-chartjs-2";
-import type { ChartPoint } from "@/lib/rate-view";
+import type { ChartPoint } from "@/lib/domain/rate-view";
 
 ChartJS.register(
   CategoryScale,

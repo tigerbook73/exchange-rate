@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RateRecord } from "./rates-db";
+import type { RateRecord } from "../contracts/rate-types";
 import { buildChartSeries, getCurrentRateView } from "./rate-view";
 
 const real = (

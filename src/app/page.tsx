@@ -9,10 +9,10 @@ import {
   buildChartSeries,
   getCurrentRateView,
   type RangeOption,
-} from "@/lib/rate-view";
-import { useRateData } from "@/lib/use-rate-data";
-import { getBeijingDateString } from "@/lib/date";
-import { displayQuoteDate, intradaySeries } from "@/lib/intraday-view";
+} from "@/lib/domain/rate-view";
+import { useRateData } from "@/lib/client/use-rate-data";
+import { getBeijingDateString } from "@/lib/domain/date";
+import { displayQuoteDate, intradaySeries } from "@/lib/domain/intraday-view";
 
 export default function Home() {
   const {

@@ -1,5 +1,5 @@
 import { addDays } from "./date";
-import type { RateRecord } from "./rates-db";
+import type { RateRecord } from "../contracts/rate-types";
 
 /** Fill completed dates from the preceding real quote, never from another fill. */
 export function dailyGapFills(

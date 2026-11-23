@@ -1,12 +1,12 @@
 import { addDays, getBeijingDateString } from "./date";
 import { dayStart } from "./intraday";
 import type { ChartPoint } from "./rate-view";
-import type { RateRecord } from "./rates-db";
+import type { RateRecord } from "../contracts/rate-types";
 import {
   FIXED_MS,
   type CollectionState,
   type IntradayPoint,
-} from "./server-types";
+} from "../contracts/server-types";
 
 export function beijingTime(value: number | string): string {
   return new Intl.DateTimeFormat("zh-CN", {

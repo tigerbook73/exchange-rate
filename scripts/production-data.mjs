@@ -53,7 +53,7 @@ const wranglerRequire = createRequire(require.resolve("wrangler"));
 await wranglerRequire("esbuild").build({
   stdin: {
     contents:
-      'export {collectMinute} from "./src/lib/server-collector"; export {collectHistory} from "./src/lib/history-collector"; export {repairDailyGaps} from "./src/lib/daily-gap-repair"; export {readMeta} from "./src/lib/server-store"; export {checkDatabaseCompatibility} from "./src/lib/db-schema";',
+      'export {collectMinute} from "./src/lib/server/server-collector"; export {collectHistory} from "./src/lib/server/history-collector"; export {repairDailyGaps} from "./src/lib/server/daily-gap-repair"; export {readMeta} from "./src/lib/server/server-store"; export {checkDatabaseCompatibility} from "./src/lib/server/db-schema";',
     resolveDir: process.cwd(),
   },
   outfile: ".wrangler/production-actions.mjs",

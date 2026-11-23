@@ -1,4 +1,4 @@
-import { SYNC_SCHEMA } from "./server-types";
+import { SYNC_SCHEMA } from "../contracts/server-types";
 
 export const UPGRADE_KEY = "icbc-rate:api-upgrade";
 export interface UpgradeTicket {

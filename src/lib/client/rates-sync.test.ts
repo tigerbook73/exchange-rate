@@ -1,10 +1,10 @@
+import type { RateRecord } from "../contracts/rate-types";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { HistoryResponse, TodayResponse } from "./api-types";
+import type { HistoryResponse, TodayResponse } from "../contracts/api-types";
 import {
   getAllRates,
   openRatesDb,
   upsertRates,
-  type RateRecord,
   type RatesDb,
 } from "./rates-db";
 import {

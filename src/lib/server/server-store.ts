@@ -1,13 +1,13 @@
-import { addDays, getBeijingDateString } from "./date";
-import { dayStart, retainedDate } from "./intraday";
-import type { RateRecord } from "./rates-db";
+import { addDays, getBeijingDateString } from "../domain/date";
+import { dayStart, retainedDate } from "../domain/intraday";
+import type { RateRecord } from "../contracts/rate-types";
 import {
   emptyCollectionState,
   SYNC_SCHEMA,
   type CollectionState,
   type IntradayPoint,
   type SyncResponse,
-} from "./server-types";
+} from "../contracts/server-types";
 
 interface MetaRow {
   schema_version: number;

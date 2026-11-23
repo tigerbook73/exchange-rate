@@ -2,8 +2,11 @@ import { deleteDB } from "idb";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { applyServerSync, readClientCache } from "./client-sync";
 import { openRatesDb, type RatesDb } from "./rates-db";
-import { emptyCollectionState, type SyncResponse } from "./server-types";
-import { buildChartSeries } from "./rate-view";
+import {
+  emptyCollectionState,
+  type SyncResponse,
+} from "../contracts/server-types";
+import { buildChartSeries } from "../domain/rate-view";
 
 let db: RatesDb;
 const id = "a".repeat(32);

@@ -7,7 +7,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { CurrentRateView } from "@/lib/rate-view";
+import type { CurrentRateView } from "@/lib/domain/rate-view";
 
 function formatUpdatedAt(publishedAt: string): string {
   const date = new Date(publishedAt);

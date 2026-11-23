@@ -1,5 +1,5 @@
-import { queryError, queryServer, serverJson } from "@/lib/server-api";
-import { SYNC_SCHEMA } from "@/lib/server-types";
+import { queryError, queryServer, serverJson } from "@/lib/server/server-api";
+import { SYNC_SCHEMA } from "@/lib/contracts/server-types";
 
 export const dynamic = "force-dynamic";
 

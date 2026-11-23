@@ -1,5 +1,5 @@
-import { isValidDate } from "./date";
-import type { QuoteSample } from "./server-types";
+import { isValidDate } from "../domain/date";
+import type { QuoteSample } from "../contracts/server-types";
 
 export type TodayQuote = Pick<
   QuoteSample,

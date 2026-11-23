@@ -1,15 +1,19 @@
-import { addDays, getBeijingDateString } from "../src/lib/date";
-import { advanceCollection, dayStart, minuteOf } from "../src/lib/intraday";
-import { collectMinute } from "../src/lib/server-collector";
-import { collectHistory } from "../src/lib/history-collector";
-import { repairDailyGaps } from "../src/lib/daily-gap-repair";
+import { addDays, getBeijingDateString } from "../src/lib/domain/date";
+import {
+  advanceCollection,
+  dayStart,
+  minuteOf,
+} from "../src/lib/domain/intraday";
+import { collectMinute } from "../src/lib/server/server-collector";
+import { collectHistory } from "../src/lib/server/history-collector";
+import { repairDailyGaps } from "../src/lib/server/daily-gap-repair";
 import {
   commitCollection,
   readMeta,
   cleanupDatabase,
-} from "../src/lib/server-store";
-import { checkDatabaseCompatibility } from "../src/lib/db-schema";
-import type { RateRecord } from "../src/lib/rates-db";
+} from "../src/lib/server/server-store";
+import { checkDatabaseCompatibility } from "../src/lib/server/db-schema";
+import type { RateRecord } from "../src/lib/contracts/rate-types";
 
 export async function run(db: D1Database, mode: string) {
   if (mode === "check") {

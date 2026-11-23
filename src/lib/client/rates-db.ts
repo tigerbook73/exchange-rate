@@ -1,18 +1,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { IntradayPoint, SyncResponse } from "./server-types";
+import type { IntradayPoint, SyncResponse } from "../contracts/server-types";
 
-export type RateSource = "today" | "history" | "carried-forward";
-
-export interface RateRecord {
-  /** ISO date, e.g. "2026-07-24". Primary key. */
-  date: string;
-  huiSell: number;
-  /** Only present for source: "today" records. */
-  publishedAt: string | null;
-  source: RateSource;
-  /** Only present for source: "carried-forward" records; points at the real record's date. */
-  carriedFromDate: string | null;
-}
+import type { RateRecord } from "../contracts/rate-types";
 
 interface FxCacheSchema extends DBSchema {
   points: { key: number; value: IntradayPoint };

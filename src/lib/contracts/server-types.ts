@@ -1,4 +1,4 @@
-import type { RateRecord } from "./rates-db";
+import type { RateRecord } from "./rate-types";
 
 export const MINUTE_MS = 60_000;
 export const FIXED_MS = 5 * MINUTE_MS;

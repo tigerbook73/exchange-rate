@@ -1,5 +1,5 @@
 import * as cheerio from "cheerio/slim";
-import { isValidDate } from "./date";
+import { isValidDate } from "../domain/date";
 
 export interface HistoryPoint {
   /** ISO date, e.g. "2026-07-24" — the source already includes the year here. */

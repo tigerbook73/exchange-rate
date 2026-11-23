@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { applyServerSync, readClientCache } from "./client-sync";
 import { openRatesDb } from "./rates-db";
-import type { SyncResponse } from "./server-types";
-import { SYNC_SCHEMA } from "./server-types";
+import type { SyncResponse } from "../contracts/server-types";
+import { SYNC_SCHEMA } from "../contracts/server-types";
 import {
   ApiUpgradeRequired,
   clearOldApiResponses,

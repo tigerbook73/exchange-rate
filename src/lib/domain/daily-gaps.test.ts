@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dailyGapFills } from "./daily-gaps";
-import type { RateRecord } from "./rates-db";
+import type { RateRecord } from "../contracts/rate-types";
 
 const real = (date: string, huiSell = 4.4331): RateRecord => ({
   date,

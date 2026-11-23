@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { advanceCollection } from "./intraday";
-import { emptyCollectionState, type QuoteSample } from "./server-types";
+import {
+  emptyCollectionState,
+  type QuoteSample,
+} from "../contracts/server-types";
 
 const time = (value: string) => Date.parse(`2026-11-22T${value}+08:00`);
 const quote = (value: string): QuoteSample => ({

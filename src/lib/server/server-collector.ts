@@ -1,10 +1,10 @@
-import { addDays, getBeijingDateString } from "./date";
-import { dailyGapFills } from "./daily-gaps";
-import { advanceCollection, minuteOf } from "./intraday";
+import { addDays, getBeijingDateString } from "../domain/date";
+import { dailyGapFills } from "../domain/daily-gaps";
+import { advanceCollection, minuteOf } from "../domain/intraday";
 import { fetchIcbcToday } from "./icbc-today";
-import type { RateRecord } from "./rates-db";
+import type { RateRecord } from "../contracts/rate-types";
 import { cleanupDatabase, commitCollection, readMeta } from "./server-store";
-import type { QuoteSample } from "./server-types";
+import type { QuoteSample } from "../contracts/server-types";
 export async function collectMinute(
   db: D1Database,
   fetchQuote = fetchIcbcToday,
