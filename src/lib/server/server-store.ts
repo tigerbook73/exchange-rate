@@ -106,15 +106,24 @@ export async function readSync(
   }
   const from = retainedDate(now);
   const historyFrom = addDays(getBeijingDateString(new Date(now)), -365);
+  // Snapshots read by date; deltas read only revisions newer than the cursor.
+  const dailyIndex = cursor ? "INDEXED BY daily_revision" : "";
+  const pointsIndex = cursor
+    ? "INDEXED BY intraday_revision"
+    : "INDEXED BY intraday_date";
+  const revisionFilter = cursor ? " AND revision > ?" : "";
+  const parameters = cursor
+    ? [historyFrom, revision, from, revision, revision]
+    : [historyFrom, from, revision];
   const meta = await db
     .prepare(
       `SELECT schema_version, dataset_id, revision, cursor_floor, state_json,
-    (SELECT json_group_array(json(value_json)) FROM (SELECT value_json FROM daily_rates INDEXED BY daily_revision WHERE date >= ? AND revision > ? ORDER BY date)) AS daily_json,
-    (SELECT json_group_array(json(value_json)) FROM (SELECT value_json FROM intraday_points INDEXED BY intraday_revision WHERE date >= ? AND revision > ? ORDER BY minute)) AS points_json,
+    (SELECT json_group_array(json(value_json)) FROM (SELECT value_json FROM daily_rates ${dailyIndex} WHERE date >= ?${revisionFilter} ORDER BY date)) AS daily_json,
+    (SELECT json_group_array(json(value_json)) FROM (SELECT value_json FROM intraday_points ${pointsIndex} WHERE date >= ?${revisionFilter} ORDER BY minute)) AS points_json,
     (SELECT json_group_array(entity_key) FROM (SELECT DISTINCT entity_key FROM sync_changes WHERE revision > ? AND entity = 'daily' AND NOT EXISTS (SELECT 1 FROM daily_rates WHERE date = entity_key))) AS deleted_json
     FROM collection_state WHERE id = 1`,
     )
-    .bind(historyFrom, revision, from, revision, revision)
+    .bind(...parameters)
     .first<SnapshotRow>();
   if (!meta) throw new Error("Database not initialized");
   if (

@@ -585,21 +585,95 @@ describe("D1 persistence and read-only API", () => {
         .run();
     }
   });
-  it("uses revision indexes for incremental reads instead of scanning the retained window", async () => {
-    const plan = await db
-      .prepare(
-        "EXPLAIN QUERY PLAN SELECT value_json FROM intraday_points INDEXED BY intraday_revision WHERE date >= ? AND revision > ? ORDER BY minute",
-      )
-      .bind("2026-11-20", 99)
-      .all<{ detail: string }>();
-    expect(
-      plan.results.some(
-        (row) =>
-          row.detail.includes("intraday_revision") &&
-          row.detail.includes("SEARCH"),
-      ),
-    ).toBe(true);
-  });
+  it.each(["snapshot", "delta"] as const)(
+    "uses window indexes for snapshots and revision indexes for deltas: %s",
+    async (mode) => {
+      await seedDaily([
+        realDaily("2026-11-21"),
+        realDaily("2024-01-01"),
+        realDaily("2026-11-20"),
+      ]);
+      const meta = await readMeta(db);
+      const cursor = `${meta.dataset_id}.${meta.revision}`;
+      const points: IntradayPoint[] = [
+        "2026-11-22T10:00:00+08:00",
+        "2026-11-19T10:00:00+08:00",
+        "2026-11-20T10:00:00+08:00",
+      ].map((time) => ({
+        minute: Date.parse(time),
+        kind: "fixed",
+        priceUnits: 47500,
+        sourceMinute: Date.parse(time),
+        sourceRequestedAt: time,
+        publishedAt: time,
+        isFallback: false,
+      }));
+      await commitCollection(
+        db,
+        meta.revision,
+        meta.state,
+        points,
+        [realDaily("2026-11-22")],
+        now,
+        "history",
+      );
+      const queries: string[] = [];
+      const tracked = new Proxy(db, {
+        get(target, key, receiver) {
+          if (key === "prepare")
+            return (sql: string) => {
+              queries.push(sql);
+              return target.prepare(sql);
+            };
+          return Reflect.get(target, key, receiver);
+        },
+      });
+      const result = await readSync(
+        tracked,
+        mode === "delta" ? cursor : null,
+        now,
+      );
+      expect(queries).toHaveLength(1);
+      expect(result.mode).toBe(mode);
+      expect(result.revision).toBe(meta.revision + 1);
+      expect(result.daily.map((record) => record.date)).toEqual(
+        mode === "delta"
+          ? ["2026-11-22"]
+          : ["2026-11-20", "2026-11-21", "2026-11-22"],
+      );
+      expect(result.points).toEqual([points[2], points[0]]);
+      const parameters =
+        mode === "delta"
+          ? [
+              result.historyFrom,
+              meta.revision,
+              result.retainedFrom,
+              meta.revision,
+              meta.revision,
+            ]
+          : [result.historyFrom, result.retainedFrom, -1];
+      const plan = await db
+        .prepare(`EXPLAIN QUERY PLAN ${queries[0]}`)
+        .bind(...parameters)
+        .all<{ detail: string }>();
+      const details = plan.results.map((row) => row.detail);
+      for (const table of ["daily_rates", "intraday_points"]) {
+        const search = details.find((detail) =>
+          detail.includes(`SEARCH ${table} USING INDEX`),
+        );
+        expect(search).toBeDefined();
+        if (mode === "delta") {
+          expect(search).toContain(
+            table === "daily_rates" ? "daily_revision" : "intraday_revision",
+          );
+        } else {
+          expect(search).toContain("date>?");
+        }
+      }
+      expect(fetchSourceHtml).not.toHaveBeenCalled();
+      expect(fetchIcbcToday).not.toHaveBeenCalled();
+    },
+  );
   it("collects real-shaped fixtures only through explicit collector entrypoints", async () => {
     const quote = parseIcbcToday(
       JSON.parse(
