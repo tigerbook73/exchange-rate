@@ -40,9 +40,11 @@ const PALETTE = {
 export function RateChart({
   points,
   emptyMessage = "该时段暂无已缓存数据",
+  minimumYSpan = 0,
 }: {
   points: ChartPoint[];
   emptyMessage?: string;
+  minimumYSpan?: number;
 }) {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
@@ -118,6 +120,24 @@ export function RateChart({
     ],
   };
 
+  const suggestedYBounds = useMemo(() => {
+    if (minimumYSpan <= 0) return {};
+    let minimum = Infinity;
+    let maximum = -Infinity;
+    for (const point of points) {
+      if (point.huiSell === null || !Number.isFinite(point.huiSell)) continue;
+      minimum = Math.min(minimum, point.huiSell);
+      maximum = Math.max(maximum, point.huiSell);
+    }
+    if (!Number.isFinite(minimum) || maximum - minimum >= minimumYSpan)
+      return {};
+    const middle = (minimum + maximum) / 2;
+    return {
+      suggestedMin: middle - minimumYSpan / 2,
+      suggestedMax: middle + minimumYSpan / 2,
+    };
+  }, [points, minimumYSpan]);
+
   const options: ChartOptions<"line"> = {
     responsive: true,
     maintainAspectRatio: false,
@@ -141,7 +161,11 @@ export function RateChart({
         grid: { color: colors.grid },
         ticks: { color: colors.text, maxRotation: 0 },
       },
-      y: { grid: { color: colors.grid }, ticks: { color: colors.text } },
+      y: {
+        ...suggestedYBounds,
+        grid: { color: colors.grid },
+        ticks: { color: colors.text },
+      },
     },
   };
 
