@@ -1,3 +1,4 @@
+import { wakeNotificationMaintenance } from "./lib/client/notification-receipts";
 import { createRoot } from "react-dom/client";
 import { ThemeProvider } from "./components/theme-provider";
 import App from "./App";
@@ -10,9 +11,19 @@ createRoot(document.getElementById("root")!).render(
 );
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("online", wakeNotificationMaintenance);
+  window.addEventListener("focus", wakeNotificationMaintenance);
+  navigator.serviceWorker.addEventListener(
+    "controllerchange",
+    wakeNotificationMaintenance,
+  );
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") wakeNotificationMaintenance();
+  });
   window.addEventListener("load", () => {
     void navigator.serviceWorker
       .register("/sw.js", { scope: "/", updateViaCache: "none" })
+      .then(() => wakeNotificationMaintenance())
       .catch((error: unknown) => {
         console.error("Service worker registration failed", error);
       });

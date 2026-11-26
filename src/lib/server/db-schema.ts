@@ -22,4 +22,10 @@ export async function checkDatabaseCompatibility(db: D1Database) {
       "SELECT (SELECT low_units FROM push_devices LIMIT 1) AS low_units, (SELECT status FROM push_events LIMIT 1) AS status",
     )
     .first();
+  const alertIndex = await db
+    .prepare(
+      "SELECT name FROM sqlite_master WHERE type='index' AND name='push_events_device_kind'",
+    )
+    .first();
+  if (!alertIndex) throw new DatabaseSchemaError();
 }

@@ -18,7 +18,12 @@ import {
   dispatchAlerts,
   enqueueTest,
 } from "./alert-store";
-import { hashToken, parseSubscription, sendPush } from "./push";
+import {
+  hashToken,
+  parseSubscription,
+  sendPush,
+  signAlertReceipt,
+} from "./push";
 import { handleAlerts } from "./api/alerts";
 import { commitCollection } from "./server-store";
 import {
@@ -201,6 +206,54 @@ describe("price alert persistence and delivery", () => {
     ]);
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+  it("keeps a single event per direction and clears only the exact clicked event", async () => {
+    await device();
+    await commit();
+    const first = (await readAlertStatus(db, "a")).recent[0];
+    const oldToken = await signAlertReceipt(
+      first.id,
+      JSON.parse(keys).privateKey,
+    );
+    await updateAlertSettings(db, "a", settings, now + 1);
+    await commit(1, 45000, now + 60000);
+    const latest = (await readAlertStatus(db, "a")).recent;
+    expect(latest).toHaveLength(1);
+    expect(latest[0].id).not.toBe(first.id);
+    expect(
+      (
+        await api(
+          request("read", "POST", undefined, { id: first.id, token: oldToken }),
+        )
+      ).status,
+    ).toBe(200);
+    expect((await readAlertStatus(db, "a")).recent).toHaveLength(1);
+    const id = latest[0].id;
+    expect(
+      (await api(request("read", "POST", undefined, { id, token: oldToken })))
+        .status,
+    ).toBe(403);
+    const token = await signAlertReceipt(id, JSON.parse(keys).privateKey);
+    expect(
+      (await api(request("read", "POST", undefined, { id, token }))).status,
+    ).toBe(200);
+    expect((await readAlertStatus(db, "a")).recent).toHaveLength(0);
+    expect((await readAlertStatus(db, "a")).highEnabled).toBe(true);
+  });
+  it("hides events at 24 hours and performs bounded physical cleanup", async () => {
+    await device();
+    await commit();
+    expect(
+      (await readAlertStatus(db, "a", now + 86400000)).recent,
+    ).toHaveLength(0);
+    await dispatchAlerts(db, keys, now + 86400000, vi.fn());
+    expect(
+      (
+        await db
+          .prepare("SELECT count(*) AS n FROM push_events")
+          .first<{ n: number }>()
+      )?.n,
+    ).toBe(0);
+  });
   it("includes threshold equality and does not trigger a rule created after a request began", async () => {
     await device();
     await commit(0, 46000);
@@ -215,10 +268,7 @@ describe("price alert persistence and delivery", () => {
     await updateAlertSettings(db, "a", settings, now + 1);
     await commit(1, 45000, now + 60000);
     const status = await readAlertStatus(db, "a");
-    expect(status.recent.map((e) => e.status)).toEqual([
-      "pending",
-      "cancelled",
-    ]);
+    expect(status.recent.map((e) => e.status)).toEqual(["pending"]);
   });
   it("bounds the number of devices even with concurrent enrollments", async () => {
     const results = await Promise.all(

@@ -8,7 +8,14 @@ const initial = {
   lowEnabled: false,
   highEnabled: true,
   recent: [
-    { kind: "low", status: "sent", createdAt: Date.now(), priceUnits: 45000 },
+    {
+      id: "a:1:low",
+      expiresAt: Date.now() + 86400000,
+      kind: "low",
+      status: "sent",
+      createdAt: Date.now(),
+      priceUnits: 45000,
+    },
   ],
 };
 test.beforeEach(async ({ page, context }) => {
@@ -138,4 +145,112 @@ test("explains denied permission and allows closing the dialog on a small screen
   ).toBeDisabled();
   await page.getByRole("button", { name: "关闭价格提醒" }).click();
   await expect(page.getByRole("dialog")).toHaveCount(0);
+});
+
+test("bell follows subscription, arrival, clearing, expiry and unsubscription", async ({
+  page,
+}) => {
+  let current = { ...initial, recent: [] as typeof initial.recent };
+  await page.route("**/api/alerts/device", (route) =>
+    route.fulfill({ json: current }),
+  );
+  await page.goto("/");
+  const bell = page.getByRole("button", { name: "价格提醒", exact: true });
+  await expect(bell).toHaveAttribute("data-notification-state", "unsubscribed");
+  await page.evaluate(() => {
+    localStorage.setItem("fx-alert-device-token", "a".repeat(72));
+    window.dispatchEvent(new Event("storage"));
+  });
+  await expect(bell).toHaveAttribute(
+    "data-notification-state",
+    "subscribed-empty",
+  );
+  current = initial;
+  await page.evaluate(() =>
+    navigator.serviceWorker.dispatchEvent(
+      new MessageEvent("message", {
+        data: { type: "ALERT_NOTIFICATIONS_CHANGED" },
+      }),
+    ),
+  );
+  await expect(bell).toHaveAttribute(
+    "data-notification-state",
+    "subscribed-unread",
+  );
+  current = { ...initial, recent: [] };
+  await page.evaluate(() =>
+    navigator.serviceWorker.dispatchEvent(
+      new MessageEvent("message", {
+        data: { type: "ALERT_NOTIFICATIONS_CHANGED" },
+      }),
+    ),
+  );
+  await expect(bell).toHaveAttribute(
+    "data-notification-state",
+    "subscribed-empty",
+  );
+  current = {
+    ...initial,
+    recent: [{ ...initial.recent[0], expiresAt: Date.now() - 1 }],
+  };
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
+  await expect(bell).toHaveAttribute(
+    "data-notification-state",
+    "subscribed-empty",
+  );
+  await page.evaluate(() => {
+    localStorage.removeItem("fx-alert-device-token");
+    window.dispatchEvent(new Event("storage"));
+  });
+  await expect(bell).toHaveAttribute("data-notification-state", "unsubscribed");
+});
+
+test("an offline read clears the bell without losing the subscription", async ({
+  page,
+}) => {
+  await page.addInitScript(() =>
+    localStorage.setItem("fx-alert-device-token", "a".repeat(72)),
+  );
+  let unavailable = false;
+  await page.route("**/api/alerts/device", (route) =>
+    unavailable
+      ? route.fulfill({ status: 503, json: { error: "offline" } })
+      : route.fulfill({ json: initial }),
+  );
+  await page.goto("/");
+  const bell = page.getByRole("button", { name: "价格提醒", exact: true });
+  await expect(bell).toHaveAttribute(
+    "data-notification-state",
+    "subscribed-unread",
+  );
+  await page.evaluate(async () => {
+    const req = indexedDB.open("fx-notification-reads", 1);
+    const db = await new Promise<IDBDatabase>(
+      (resolve) => (req.onsuccess = () => resolve(req.result)),
+    );
+    const tx = db.transaction("reads", "readwrite");
+    tx.objectStore("reads").put({
+      id: "a:1:low",
+      token: "a".repeat(64),
+      expiresAt: Date.now() + 86400000,
+      pending: 1,
+    });
+    await new Promise((resolve) => (tx.oncomplete = resolve));
+    db.close();
+  });
+  unavailable = true;
+  await page.evaluate(() =>
+    navigator.serviceWorker.dispatchEvent(
+      new MessageEvent("message", {
+        data: { type: "ALERT_NOTIFICATIONS_CHANGED" },
+      }),
+    ),
+  );
+  await expect(bell).toHaveAttribute(
+    "data-notification-state",
+    "subscribed-empty",
+  );
+  expect(
+    await page.evaluate(() => localStorage.getItem("fx-alert-device-token")),
+  ).toBe("a".repeat(72));
 });

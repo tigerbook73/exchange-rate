@@ -1,3 +1,9 @@
+import { flushNotificationReads } from "../lib/client/notification-receipts";
+import {
+  showAlertNotification,
+  readAlertNotification,
+  maintainAlertNotifications,
+} from "./notifications";
 import { defaultCache } from "@serwist/vite/worker";
 import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
 import { Serwist, NetworkOnly } from "serwist";
@@ -30,46 +36,56 @@ const serwist = new Serwist({
 
 serwist.addEventListeners();
 
-// Always display a visible notification; push is never used for silent polling.
 self.addEventListener("push", (event: PushEvent) => {
-  let value: unknown;
-  try {
-    value = event.data?.json();
-  } catch {
-    return;
-  }
-  if (!value || typeof value !== "object") return;
-  const data = value as Record<string, unknown>;
-  if (
-    typeof data.title !== "string" ||
-    typeof data.body !== "string" ||
-    typeof data.tag !== "string"
-  )
-    return;
   event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      tag: data.tag,
-      icon: "/icons/icon-192.png",
-      data: { url: "/" },
-    }),
+    (async () => {
+      try {
+        await Promise.all([
+          showAlertNotification(event.data?.json()),
+          flushNotificationReads(),
+        ]);
+      } catch {
+        console.error("Notification could not be displayed");
+      }
+    })(),
   );
 });
 self.addEventListener("notificationclick", (event: NotificationEvent) => {
   event.notification.close();
+  // Acknowledging never blocks opening the app, including when offline.
   event.waitUntil(
-    (async () => {
-      const windows = await self.clients.matchAll({
-        type: "window",
-        includeUncontrolled: true,
-      });
-      const existing = windows.find(
-        (client) => new URL(client.url).origin === self.location.origin,
-      );
-      if (existing) await existing.focus();
-      else await self.clients.openWindow("/");
-    })(),
+    Promise.allSettled([
+      readAlertNotification(event.notification),
+      (async () => {
+        const windows = await self.clients.matchAll({
+          type: "window",
+          includeUncontrolled: true,
+        });
+        const existing = windows.find(
+          (client) => new URL(client.url).origin === self.location.origin,
+        );
+        if (existing) await existing.focus();
+        else await self.clients.openWindow("/");
+      })(),
+    ]).then(() => undefined),
   );
+});
+self.addEventListener("notificationclose", (event: NotificationEvent) => {
+  event.waitUntil(readAlertNotification(event.notification));
+});
+self.addEventListener("message", (event: ExtendableMessageEvent) => {
+  if (
+    event.data?.type === "MAINTAIN_ALERT_NOTIFICATIONS" ||
+    event.data?.type === "CLEAR_ALERT_NOTIFICATIONS"
+  )
+    event.waitUntil(
+      maintainAlertNotifications(
+        event.data.type === "CLEAR_ALERT_NOTIFICATIONS",
+      ),
+    );
+});
+self.addEventListener("activate", (event: ExtendableEvent) => {
+  event.waitUntil(maintainAlertNotifications());
 });
 
 // A preceding SW may briefly serve a newer page before this version takes over.

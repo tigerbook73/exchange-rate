@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { visibleAlertEvents } from "../lib/client/notification-receipts";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
-import { Bell, X } from "lucide-react";
+import { Bell, BellDot, BellOff, X } from "lucide-react";
 import { Button } from "./ui/button";
 import {
   alertRequest,
@@ -31,6 +32,11 @@ export function AlertSettingsButton({
   const [token, setToken] = useState<string | null>(null);
   const [publicKey, setPublicKey] = useState("");
   const [status, setStatus] = useState<AlertStatus | null>(null);
+  const statusRef = useRef<AlertStatus | null>(null);
+  const updateStatus = useCallback((next: AlertStatus | null) => {
+    statusRef.current = next;
+    setStatus(next);
+  }, []);
   const [invite, setInvite] = useState("");
   const [low, setLow] = useState("");
   const [high, setHigh] = useState("");
@@ -50,8 +56,8 @@ export function AlertSettingsButton({
     ios &&
     !window.matchMedia("(display-mode: standalone)").matches &&
     !(navigator as Navigator & { standalone?: boolean }).standalone;
-  function apply(next: AlertStatus) {
-    setStatus(next);
+  async function apply(next: AlertStatus) {
+    updateStatus({ ...next, recent: await visibleAlertEvents(next.recent) });
     setLow(next.lowUnits === null ? "" : (next.lowUnits / 10000).toFixed(4));
     setHigh(next.highUnits === null ? "" : (next.highUnits / 10000).toFixed(4));
     setLowEnabled(next.lowEnabled);
@@ -67,7 +73,7 @@ export function AlertSettingsButton({
       if (e instanceof AlertRequestError && e.status === 401) {
         saveDeviceToken(null);
         setToken(null);
-        setStatus(null);
+        updateStatus(null);
       }
       setError(e instanceof Error ? e.message : "操作失败，请稍后重试");
     } finally {
@@ -84,7 +90,7 @@ export function AlertSettingsButton({
       const config = await alertRequest<{ publicKey: string }>("config");
       setPublicKey(config.publicKey);
       if (stored)
-        apply(await alertRequest<AlertStatus>("device", "GET", stored));
+        await apply(await alertRequest<AlertStatus>("device", "GET", stored));
     });
   }
   function settings(): AlertSettings {
@@ -110,16 +116,110 @@ export function AlertSettingsButton({
       )
         throw new Error("低价阈值须小于高价阈值");
       if (token)
-        apply(await alertRequest<AlertStatus>("device", "PUT", token, next));
+        await apply(
+          await alertRequest<AlertStatus>("device", "PUT", token, next),
+        );
       else {
         const result = await subscribeDevice(publicKey, invite, next);
         setToken(result.token);
         setInvite("");
-        apply(result);
+        await apply(result);
       }
       setMessage("已保存。达标后提醒一次，请手动重新开启后续提醒。");
     });
   }
+  const refreshIndicator = useCallback(async () => {
+    const stored = deviceToken();
+    setToken(stored);
+    if (!stored) {
+      updateStatus(null);
+      return;
+    }
+    try {
+      const next = await alertRequest<AlertStatus>("device", "GET", stored);
+      if (deviceToken() !== stored) return;
+      updateStatus({ ...next, recent: await visibleAlertEvents(next.recent) });
+    } catch (e) {
+      if (
+        e instanceof AlertRequestError &&
+        e.status === 401 &&
+        deviceToken() === stored
+      ) {
+        saveDeviceToken(null);
+        setToken(null);
+        updateStatus(null);
+      }
+      // Offline clicks are already recorded locally; update the icon before the
+      // server acknowledgement can be delivered, keeping the subscription.
+      const previous = statusRef.current;
+      if (previous && deviceToken() === stored) {
+        const recent = await visibleAlertEvents(previous.recent);
+        if (statusRef.current === previous && deviceToken() === stored)
+          updateStatus({ ...previous, recent });
+      }
+    }
+  }, [updateStatus]);
+  useEffect(() => {
+    let inflight = false;
+    let requested = false;
+    let disposed = false;
+    const refresh = async () => {
+      if (document.visibilityState !== "visible" || disposed) return;
+      requested = true;
+      if (inflight) return;
+      inflight = true;
+      try {
+        do {
+          requested = false;
+          await refreshIndicator();
+        } while (requested && !disposed);
+      } finally {
+        inflight = false;
+      }
+    };
+    const workerMessage = (event: MessageEvent) => {
+      if (event.data?.type === "ALERT_NOTIFICATIONS_CHANGED") void refresh();
+    };
+    void refresh();
+    window.addEventListener("focus", refresh);
+    window.addEventListener("online", refresh);
+    window.addEventListener("pageshow", refresh);
+    window.addEventListener("storage", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    navigator.serviceWorker?.addEventListener("message", workerMessage);
+    const timer = window.setInterval(() => void refresh(), 60_000);
+    return () => {
+      disposed = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("online", refresh);
+      window.removeEventListener("pageshow", refresh);
+      window.removeEventListener("storage", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+      navigator.serviceWorker?.removeEventListener("message", workerMessage);
+    };
+  }, [refreshIndicator]);
+  const subscribed = Boolean(
+    token && supported && Notification.permission === "granted",
+  );
+  const recent =
+    status?.recent.filter((event) => event.expiresAt > Date.now()) ?? [];
+  const hasNotifications = recent.length > 0;
+  const indicator = !subscribed
+    ? "unsubscribed"
+    : hasNotifications
+      ? "subscribed-unread"
+      : "subscribed-empty";
+  const indicatorLabel = !subscribed
+    ? "未订阅"
+    : hasNotifications
+      ? "已订阅有通知"
+      : "已订阅无通知";
+  const IndicatorIcon = !subscribed
+    ? BellOff
+    : hasNotifications
+      ? BellDot
+      : Bell;
   const alreadyMet =
     currentPrice !== undefined &&
     ((lowEnabled && Number(low) > 0 && currentPrice <= Number(low)) ||
@@ -133,11 +233,13 @@ export function AlertSettingsButton({
             size="icon-sm"
             className="align-middle text-muted-foreground"
             aria-label="价格提醒"
-            title="价格提醒"
+            title={`价格提醒 · ${indicatorLabel}`}
+            aria-description={indicatorLabel}
+            data-notification-state={indicator}
           />
         }
       >
-        <Bell />
+        <IndicatorIcon />
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/40" />
@@ -160,6 +262,9 @@ export function AlertSettingsButton({
             按本设备设置，页面关闭后也可接收通知。每项达标提醒一次。
           </Dialog.Description>
           <div className="mt-4 space-y-4">
+            <p className="text-sm text-muted-foreground" aria-live="polite">
+              {indicatorLabel}
+            </p>
             {needsInstall ? (
               <p className="text-sm">
                 请先通过浏览器分享菜单“添加到主屏幕”，再从主屏幕打开并开启通知。
@@ -282,7 +387,7 @@ export function AlertSettingsButton({
                         await alertRequest("device", "DELETE", token);
                         saveDeviceToken(null);
                         setToken(null);
-                        setStatus(null);
+                        updateStatus(null);
                         setLowEnabled(false);
                         setHighEnabled(false);
                         const registration =
@@ -290,6 +395,9 @@ export function AlertSettingsButton({
                         await (
                           await registration?.pushManager.getSubscription()
                         )?.unsubscribe();
+                        navigator.serviceWorker?.controller?.postMessage({
+                          type: "CLEAR_ALERT_NOTIFICATIONS",
+                        });
                         setMessage("已取消本设备的全部提醒。");
                       })
                     }
@@ -299,11 +407,11 @@ export function AlertSettingsButton({
                 </>
               ) : null}
             </div>
-            {status?.recent.length ? (
+            {recent.length ? (
               <div className="space-y-2 border-t border-border pt-3 text-xs text-muted-foreground">
-                <p>最近提醒</p>
-                {status.recent.map((event, i) => (
-                  <p key={i}>
+                <p>最近 24 小时提醒 · 高价、低价各保留一条</p>
+                {recent.map((event) => (
+                  <p key={event.id}>
                     {event.kind === "test"
                       ? "测试通知"
                       : event.kind === "low"

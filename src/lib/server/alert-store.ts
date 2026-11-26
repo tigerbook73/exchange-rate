@@ -5,8 +5,12 @@ import type {
   DeviceSubscription,
 } from "../contracts/alert-types";
 import type { QuoteSample } from "../contracts/server-types";
-import { ALERT_TTL, MAX_PUSH_DEVICES } from "../domain/price-alerts";
-import { sendPush, vapidKeys } from "./push";
+import {
+  ALERT_RETENTION,
+  ALERT_TTL,
+  MAX_PUSH_DEVICES,
+} from "../domain/price-alerts";
+import { sendPush, signAlertReceipt, vapidKeys } from "./push";
 
 export function enqueueAlertStatements(
   db: D1Database,
@@ -25,7 +29,11 @@ export function enqueueAlertStatements(
       FROM push_devices d CROSS JOIN json_each('["low","high"]') j
       WHERE d.updated_at <= ? AND ((j.value='low' AND d.low_enabled=1 AND ? <= d.low_units)
         OR (j.value='high' AND d.high_enabled=1 AND ? >= d.high_units))
-      AND EXISTS (SELECT 1 FROM collection_state WHERE id=1 AND write_id=? AND revision=?)`,
+      AND EXISTS (SELECT 1 FROM collection_state WHERE id=1 AND write_id=? AND revision=?)
+      ON CONFLICT(device_id, kind) DO UPDATE SET id=excluded.id, price_units=excluded.price_units,
+        threshold_units=excluded.threshold_units, published_at=excluded.published_at, created_at=excluded.created_at,
+        expires_at=excluded.expires_at, next_attempt_at=excluded.next_attempt_at, attempts=0, status='pending'
+      WHERE push_events.id != excluded.id AND excluded.created_at >= push_events.created_at`,
       )
       .bind(
         quote.priceUnits,
@@ -82,6 +90,7 @@ export async function registerDevice(
 export async function readAlertStatus(
   db: D1Database,
   id: string,
+  now = Date.now(),
 ): Promise<AlertStatus> {
   const row = await db
     .prepare(
@@ -97,9 +106,9 @@ export async function readAlertStatus(
   if (!row) throw new Error("设备订阅不存在");
   const events = await db
     .prepare(
-      `SELECT kind, status, created_at AS createdAt, price_units AS priceUnits FROM push_events WHERE device_id=? ORDER BY created_at DESC LIMIT 5`,
+      `SELECT id, kind, status, created_at AS createdAt, created_at + ? AS expiresAt, price_units AS priceUnits FROM push_events WHERE device_id=? AND created_at > ? ORDER BY created_at DESC LIMIT 3`,
     )
-    .bind(id)
+    .bind(ALERT_RETENTION, id, now - ALERT_RETENTION)
     .all<AlertStatus["recent"][number]>();
   return {
     lowUnits: row.low_units,
@@ -147,7 +156,9 @@ export async function enqueueTest(db: D1Database, id: string, now: number) {
     db
       .prepare(
         `INSERT INTO push_events (id, device_id, kind, created_at, expires_at, next_attempt_at)
-      SELECT ?, id, 'test', ?, ?, ? FROM push_devices WHERE id=? AND last_test_at=? AND changes()=1`,
+      SELECT ?, id, 'test', ?, ?, ? FROM push_devices WHERE id=? AND last_test_at=? AND changes()=1
+      ON CONFLICT(device_id, kind) DO UPDATE SET id=excluded.id, created_at=excluded.created_at,
+        expires_at=excluded.expires_at, next_attempt_at=excluded.next_attempt_at, attempts=0, status='pending'`,
       )
       .bind(eventId, now, now + ALERT_TTL, now, id, now),
   ]);
@@ -161,6 +172,7 @@ interface PendingEvent {
   threshold_units: number | null;
   published_at: string | null;
   expires_at: number;
+  created_at: number;
   attempts: number;
 }
 function notification(event: PendingEvent): AlertNotification {
@@ -171,7 +183,8 @@ function notification(event: PendingEvent): AlertNotification {
       event.kind === "test"
         ? "这台设备可以接收汇率通知。"
         : `当前 ¥${(event.price_units! / 10000).toFixed(4)}，已达到 ${event.kind === "low" ? "≤" : "≥"} ¥${(event.threshold_units! / 10000).toFixed(4)}\n报价时间：${event.published_at?.replace("T", " ").replace(/(?:\+08:00|Z)$/, "")}（北京时间）`,
-    tag: event.id,
+    tag: `fx-alert-${event.kind}`,
+    createdAt: event.created_at,
     url: "/",
   };
 }
@@ -214,7 +227,14 @@ export async function dispatchAlerts(
     try {
       status = await sendPush(
         JSON.parse(device.subscription_json),
-        notification(event),
+        {
+          ...notification(event),
+          receipt: {
+            id: event.id,
+            token: await signAlertReceipt(event.id, keys.privateKey),
+            expiresAt: event.created_at + ALERT_RETENTION,
+          },
+        },
         keys,
         remaining,
         fetcher,
@@ -255,8 +275,8 @@ export async function dispatchAlerts(
       .bind(now),
     db
       .prepare(
-        `DELETE FROM push_events WHERE id IN (SELECT id FROM push_events WHERE status!='pending' AND created_at<? LIMIT 20)`,
+        `DELETE FROM push_events WHERE id IN (SELECT id FROM push_events WHERE created_at<=? LIMIT 20)`,
       )
-      .bind(now - 30 * 86400_000),
+      .bind(now - ALERT_RETENTION),
   ]);
 }

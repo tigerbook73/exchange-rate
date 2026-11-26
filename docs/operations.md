@@ -11,9 +11,11 @@
 
 ## 价格提醒部署
 
-2026-11-26 已应用增量迁移 `0006_price_alerts.sql` 并通过生产数据检查，schema 仍为 1；发布网站 `24f3d8af-10b9-496d-82e7-9552e5cff13d`、collector `07ea2c81-250b-44fd-8fb5-bcfe47f66398`。两个 Worker 已配置 VAPID Secret，网站另配置邀请码。发布前备份为 `.wrangler/backups/2026-11-26-before-price-alerts.sql`。
+2026-11-26 已应用 `0006_price_alerts.sql` 和 `0007_single_alert_per_kind.sql`，通过生产数据检查，schema 仍为 1。最新通知生命周期版本：网站 `3eb13331-2417-4f84-a391-6e6c1d34cfa5`、collector `6ba43d64-bf52-41f3-824a-afd55f8db36a`。两个 Worker 共用 VAPID Secret，网站另配置邀请码。
 
-本地验证通过 Workerd 加密 / 签名、旧 SW 升级、本地数据保留及 Chromium 模拟 push 显示；正式手机接收及实际推送发送轮次 CPU 需在设备加入后确认。无设备时的 Cron 指标不能代替推送负载指标。免费计划适配继续按实际 CPU / D1 用量判断，不因推送本身免费而承诺无限订阅。
+`0007` 按设备和类型保留最新提醒、删除超过 24 小时的提醒，再创建唯一索引；不改汇率历史。迁移前备份为 `.wrangler/backups/2026-11-26-before-notification-retention.sql`，首次提醒功能备份为同目录的 `2026-11-26-before-price-alerts.sql`。代码回滚不会撤销提醒清理或数据库索引，不自动导入备份。
+
+本地已验证回执鉴权、离线补交、通知替换 / 点击清理、三态图标、Workerd 签名、旧 SW 升级及数据保留。正式手机接收及实际发送轮次 CPU 仍需设备触发后确认；无待发通知的 Cron 指标不能代替推送负载指标。应用一直关闭时不能保证系统通知中心恰好 24 小时撤回，下次唤醒会清理。
 
 ## 恢复依据
 

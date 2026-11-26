@@ -10,6 +10,8 @@ export interface DeviceSubscription {
   keys: { p256dh: string; auth: string };
 }
 export interface AlertEvent {
+  id: string;
+  expiresAt: number;
   kind: "low" | "high" | "test";
   status: "pending" | "sent" | "failed" | "expired" | "cancelled";
   createdAt: number;
@@ -18,7 +20,14 @@ export interface AlertEvent {
 export interface AlertStatus extends AlertSettings {
   recent: AlertEvent[];
 }
+export interface NotificationReceipt {
+  id: string;
+  token: string;
+  expiresAt: number;
+}
 export interface AlertNotification {
+  receipt?: NotificationReceipt;
+  createdAt?: number;
   title: string;
   body: string;
   tag: string;

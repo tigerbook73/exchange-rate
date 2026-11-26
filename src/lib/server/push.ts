@@ -41,11 +41,15 @@ export function parseSubscription(value: unknown): DeviceSubscription {
     keys: { p256dh: v.keys.p256dh, auth: v.keys.auth },
   };
 }
-export function vapidKeys(raw: string): VapidKeys {
+export function vapidKeys(raw: string) {
   const keys = JSON.parse(raw) as VapidKeys;
   if (!keys.publicKey || !keys.privateKey || !keys.subject)
     throw new Error("推送密钥未配置");
-  return keys;
+  return {
+    subject: keys.subject,
+    publicKey: keys.publicKey,
+    privateKey: keys.privateKey,
+  };
 }
 export async function hashToken(value: string) {
   const bytes = await crypto.subtle.digest(
@@ -87,7 +91,18 @@ export async function sendPush(
   parseSubscription(subscription);
   const payload = await buildPushPayload(
     {
-      data: { ...notification },
+      data: {
+        title: notification.title,
+        body: notification.body,
+        tag: notification.tag,
+        url: notification.url,
+        ...(notification.receipt
+          ? { receipt: { ...notification.receipt } }
+          : {}),
+        ...(notification.createdAt !== undefined
+          ? { createdAt: notification.createdAt }
+          : {}),
+      },
       options: { ttl: Math.max(1, Math.min(300, ttl)), urgency: "high" },
     },
     subscription,
@@ -100,4 +115,40 @@ export async function sendPush(
   });
   await response.body?.cancel();
   return response.status;
+}
+
+async function receiptKey(privateKey: string) {
+  return crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(privateKey),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign", "verify"],
+  );
+}
+export async function signAlertReceipt(id: string, privateKey: string) {
+  const signature = await crypto.subtle.sign(
+    "HMAC",
+    await receiptKey(privateKey),
+    new TextEncoder().encode(`fx-alert-read:${id}`),
+  );
+  return Array.from(new Uint8Array(signature), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+export async function verifyAlertReceipt(
+  id: string,
+  token: string,
+  privateKey: string,
+) {
+  if (!/^[a-f0-9]{64}$/.test(token)) return false;
+  const bytes = Uint8Array.from(token.match(/../g)!, (hex) =>
+    parseInt(hex, 16),
+  );
+  return crypto.subtle.verify(
+    "HMAC",
+    await receiptKey(privateKey),
+    bytes,
+    new TextEncoder().encode(`fx-alert-read:${id}`),
+  );
 }

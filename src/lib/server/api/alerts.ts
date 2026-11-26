@@ -4,7 +4,13 @@ import {
   registerDevice,
   updateAlertSettings,
 } from "../alert-store";
-import { hashToken, parseSubscription, sameSecret, vapidKeys } from "../push";
+import {
+  hashToken,
+  parseSubscription,
+  sameSecret,
+  vapidKeys,
+  verifyAlertReceipt,
+} from "../push";
 import { parseAlertSettings } from "../../domain/price-alerts";
 
 class ApiError extends Error {
@@ -68,6 +74,7 @@ export async function handleAlerts(
     "/api/alerts/config": ["GET"],
     "/api/alerts/device": ["POST", "GET", "PUT", "DELETE"],
     "/api/alerts/test": ["POST"],
+    "/api/alerts/read": ["POST"],
   };
   if (!Object.hasOwn(methods, path)) return json({ error: "Not found" }, 404);
   if (!methods[path].includes(request.method))
@@ -117,6 +124,24 @@ export async function handleAlerts(
           409,
         );
       return json({ token, ...(await readAlertStatus(env.DB, id)) }, 201);
+    }
+    if (path === "/api/alerts/read") {
+      const input = await body(request);
+      if (
+        typeof input.id !== "string" ||
+        !/^[a-z0-9:-]{1,128}$/.test(input.id) ||
+        typeof input.token !== "string" ||
+        !(await verifyAlertReceipt(
+          input.id,
+          input.token,
+          vapidKeys(env.PUSH_VAPID_KEYS).privateKey,
+        ))
+      )
+        throw new ApiError("通知清理凭证无效", 403);
+      await env.DB.prepare("DELETE FROM push_events WHERE id=?")
+        .bind(input.id)
+        .run();
+      return json({ cleared: true });
     }
     const token = request.headers
       .get("authorization")

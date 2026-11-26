@@ -2,6 +2,7 @@ import type { AlertSettings } from "../contracts/alert-types";
 import type { QuoteSample } from "../contracts/server-types";
 import { getBeijingDateString } from "./date";
 
+export const ALERT_RETENTION = 24 * 60 * 60_000;
 export const ALERT_TTL = 5 * 60_000;
 export const MAX_PUSH_DEVICES = 10;
 export function freshAlertQuote(quote: QuoteSample | null, now: number) {
