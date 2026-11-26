@@ -17,4 +17,9 @@ export async function checkDatabaseCompatibility(db: D1Database) {
     .first<{ schema_version: number; write_id: string | null }>();
   if (!row) throw new Error("Database not initialized");
   assertDatabaseSchema(row.schema_version);
+  await db
+    .prepare(
+      "SELECT (SELECT low_units FROM push_devices LIMIT 1) AS low_units, (SELECT status FROM push_events LIMIT 1) AS status",
+    )
+    .first();
 }

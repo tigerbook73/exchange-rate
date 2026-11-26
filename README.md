@@ -71,6 +71,37 @@ pnpm exec wrangler d1 export DB --remote --output .wrangler/backups/before-deplo
 
 如使用 Cloudflare Builds，只为网站配置一条流水线：Build command 留空，Deploy command 为 `pnpm run deploy`，变量 `PNPM_VERSION=11`；令牌需 D1 写权限和两个 Worker 发布权限。预览分支不要执行生产部署命令。Git 推送与实际部署成功分别确认。
 
+## 价格提醒
+
+页面底部“价格提醒”按设备设置一次性低价 / 高价通知。首次开启需要共享邀请码和系统通知权限；iPhone / iPad 先添加到主屏幕再打开。各设备单独设置，触发后手动重新开启，无需账号。测试通知由下一轮 Cron 发送。
+
+首次配置（正式环境已有订阅时不要重新生成 VAPID 密钥）：
+
+```bash
+pnpm push:setup
+```
+
+密钥和随机邀请码保存在 Git 忽略的 `.wrangler/push-website-secrets.json`（权限 600），其中 `PUSH_INVITE_CODE` 即分享给使用者的口令。该文件需自行妥善保管。脚本同时生成 collector 的 Secret 文件，并补充本地 `.dev.vars` 中尚未设置的项，保留已有值。
+
+首次正式配置时，先备份 D1、迁移并检查数据，再上传 Secret 和按既有入口发布。`secret bulk` 会部署当前线上代码版本，不会发布本地改动：
+
+```bash
+pnpm exec wrangler secret bulk .wrangler/push-website-secrets.json
+pnpm exec wrangler secret bulk .wrangler/push-collector-secrets.json --config collector/wrangler.jsonc
+pnpm run deploy
+```
+
+两个 Worker 的 `PUSH_VAPID_KEYS` 必须一致；网站额外需要 `PUSH_INVITE_CODE`。Secret 配置成功不代表新功能已经部署。后续部署无需重复生成或上传；仅修改邀请码不会撤销已加入设备。
+
+清理浏览器数据后无法找回原设备凭证，可按 ID 撤销遗留订阅（同时删除该设备发送记录，不影响汇率历史）：
+
+```bash
+pnpm push:devices list                 # 默认本地 D1
+pnpm push:devices remove <设备UUID>
+pnpm push:devices list --remote        # 明确指定生产
+pnpm push:devices remove <设备UUID> --remote
+```
+
 ## 偶尔使用的命令
 
 | 用途                                            | 命令                                                                             |

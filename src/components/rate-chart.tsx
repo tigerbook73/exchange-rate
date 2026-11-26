@@ -146,7 +146,7 @@ export function RateChart({
   };
 
   return (
-    <div className="relative min-h-0 flex-1">
+    <div className="relative min-h-0 flex-1 overflow-hidden">
       <Line
         className="absolute inset-0 h-full w-full"
         ref={chartRef}

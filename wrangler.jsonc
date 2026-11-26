@@ -22,5 +22,6 @@
       "remote": false,
     },
   ],
+  "secrets": { "required": ["PUSH_VAPID_KEYS", "PUSH_INVITE_CODE"] },
   "observability": { "enabled": true, "traces": { "enabled": true } },
 }

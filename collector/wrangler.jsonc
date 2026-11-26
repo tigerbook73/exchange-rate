@@ -17,5 +17,6 @@
     },
   ],
   "triggers": { "crons": ["* * * * *"] },
+  "secrets": { "required": ["PUSH_VAPID_KEYS"] },
   "observability": { "enabled": true, "traces": { "enabled": true } },
 }

@@ -49,12 +49,15 @@ test("production service worker controls the page and reloads cached data offlin
     state,
   };
   // Context routing includes requests initiated by the service worker itself.
-  await context.route("**/api/**", (route) =>
+  await context.route("**/api/sync*", (route) =>
     route.fulfill({
       json: new URL(route.request().url()).searchParams.has("cursor")
         ? { ...data, mode: "delta", daily: [] }
         : data,
     }),
+  );
+  await context.route("**/api/alerts/config", (route) =>
+    route.fulfill({ json: { publicKey: "test-key" } }),
   );
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
@@ -62,7 +65,30 @@ test("production service worker controls the page and reloads cached data offlin
   await page.waitForFunction(() => Boolean(navigator.serviceWorker.controller));
   await page.reload();
   await expect(page.getByText("4.7500", { exact: true })).toBeVisible();
+  expect(
+    await page.evaluate(async () => (await fetch("/api/alerts/config")).json()),
+  ).toEqual({ publicKey: "test-key" });
+  expect(
+    await page.evaluate(async () => {
+      const names = await caches.keys();
+      for (const name of names)
+        if (await (await caches.open(name)).match("/api/alerts/config"))
+          return true;
+      return false;
+    }),
+  ).toBe(false);
+  await context.unroute("**/api/alerts/config");
   await context.setOffline(true);
+  expect(
+    await page.evaluate(async () => {
+      try {
+        await fetch("/api/alerts/config");
+        return false;
+      } catch {
+        return true;
+      }
+    }),
+  ).toBe(true);
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(page.getByText("4.7500", { exact: true })).toBeVisible();
   await expect(page.getByText("离线 · 显示已缓存数据")).toBeVisible();

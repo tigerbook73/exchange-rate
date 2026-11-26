@@ -1,3 +1,4 @@
+import { handleAlerts } from "../src/lib/server/api/alerts";
 import { GET as sync } from "../src/lib/server/api/sync";
 import { GET as intraday } from "../src/lib/server/api/intraday";
 
@@ -31,6 +32,7 @@ export async function handleApi(
 export default {
   async fetch(request, env) {
     const path = new URL(request.url).pathname;
+    if (path.startsWith("/api/alerts/")) return handleAlerts(request, env);
     if (path === "/api" || path.startsWith("/api/"))
       return handleApi(request, env.DB);
     return env.ASSETS.fetch(request);

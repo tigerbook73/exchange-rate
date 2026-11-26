@@ -1,3 +1,4 @@
+import { enqueueAlertStatements } from "./alert-store";
 import { addDays, getBeijingDateString } from "../domain/date";
 import { dayStart, retainedDate } from "../domain/intraday";
 import type { RateRecord } from "../contracts/rate-types";
@@ -6,6 +7,7 @@ import {
   SYNC_SCHEMA,
   type CollectionState,
   type IntradayPoint,
+  type QuoteSample,
   type SyncResponse,
 } from "../contracts/server-types";
 
@@ -159,6 +161,7 @@ export async function commitCollection(
   daily: RateRecord[],
   now: number,
   task: "minute" | "history" | "demo" | "repair" = "minute",
+  alertQuote: QuoteSample | null = null,
 ) {
   const revision = expectedRevision + 1;
   // A write marker fences this atomic batch without a lock, lease or release.
@@ -223,6 +226,10 @@ export async function commitCollection(
       )
       .bind(revision, now, token, revision),
   );
+  if (alertQuote)
+    commands.push(
+      ...enqueueAlertStatements(db, alertQuote, now, token, revision),
+    );
   const result = await db.batch(commands);
   return result[0].meta.changes === 1;
 }

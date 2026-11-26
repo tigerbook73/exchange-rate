@@ -34,10 +34,13 @@
     "db:bootstrap:remote": "node scripts/production-data.mjs bootstrap --remote",
     "collector:dev": "wrangler dev --config collector/wrangler.jsonc --persist-to .wrangler/state --test-scheduled --port 8787",
     "collector:local": "node scripts/local-data.mjs watch",
-    "deploy:collector": "pnpm run db:migrate:remote && pnpm run db:bootstrap:remote && node scripts/deploy-collector.mjs"
+    "deploy:collector": "pnpm run db:migrate:remote && pnpm run db:bootstrap:remote && node scripts/deploy-collector.mjs",
+    "push:setup": "node scripts/setup-push.mjs",
+    "push:devices": "node scripts/push-devices.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
+    "@block65/webcrypto-web-push": "^2.0.0",
     "@fontsource-variable/geist": "^5.3.0",
     "@fontsource-variable/geist-mono": "^5.3.0",
     "chart.js": "^4.5.1",

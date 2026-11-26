@@ -1,3 +1,4 @@
+import { freshAlertQuote } from "../domain/price-alerts";
 import { addDays, getBeijingDateString } from "../domain/date";
 import { dailyGapFills } from "../domain/daily-gaps";
 import { advanceCollection, minuteOf } from "../domain/intraday";
@@ -9,6 +10,7 @@ export async function collectMinute(
   db: D1Database,
   fetchQuote = fetchIcbcToday,
   scheduledAt: number | null = null,
+  alertsEnabled = false,
 ) {
   const now = Date.now();
   const fillThrough = addDays(getBeijingDateString(new Date(now)), -1);
@@ -72,6 +74,10 @@ export async function collectMinute(
     result.fixed,
     daily,
     Date.now(),
+    "minute",
+    alertsEnabled && freshAlertQuote(result.accepted, requestedAt)
+      ? result.accepted
+      : null,
   );
   console.log(
     JSON.stringify({
