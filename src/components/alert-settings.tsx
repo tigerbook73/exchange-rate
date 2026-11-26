@@ -126,9 +126,18 @@ export function AlertSettingsButton({
       (highEnabled && Number(high) > 0 && currentPrice >= Number(high)));
   return (
     <Dialog.Root open={open} onOpenChange={onOpen}>
-      <Dialog.Trigger render={<Button variant="ghost" size="sm" />}>
+      <Dialog.Trigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="align-middle text-muted-foreground"
+            aria-label="价格提醒"
+            title="价格提醒"
+          />
+        }
+      >
         <Bell />
-        价格提醒
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/40" />

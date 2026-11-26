@@ -1,3 +1,4 @@
+import { AlertSettingsButton } from "@/components/alert-settings";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,7 +38,10 @@ export function RateCard({
     <Card className="w-full max-w-md min-h-[30svh] shrink-0">
       <CardHeader>
         <CardTitle className="text-base font-normal text-muted-foreground">
-          工商银行 澳元 购汇价（现汇卖出）
+          工商银行 澳元{" "}
+          <span className="whitespace-nowrap">
+            购汇价 <AlertSettingsButton currentPrice={rate?.huiSell} />
+          </span>
         </CardTitle>
         <CardAction>
           <Button

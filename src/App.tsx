@@ -1,4 +1,3 @@
-import { AlertSettingsButton } from "@/components/alert-settings";
 import { useMemo, useState } from "react";
 import { InstallButton } from "@/components/install-button";
 import { RangeToggle } from "@/components/range-toggle";
@@ -121,10 +120,7 @@ export default function Home() {
         />
       </div>
 
-      <div className="flex shrink-0 items-center justify-center gap-2">
-        <AlertSettingsButton currentPrice={currentRate?.huiSell} />
-        <InstallButton />
-      </div>
+      <InstallButton />
 
       <p className="w-full max-w-md text-left text-sm text-muted-foreground">
         数据来自
