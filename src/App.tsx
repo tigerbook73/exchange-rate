@@ -112,7 +112,7 @@ export default function Home() {
         </p>
         <RateChart
           points={chartPoints}
-          minimumYSpan={range === "1d" ? 0 : 0.02}
+          minimumYSpan={0.02}
           emptyMessage={
             range === "1d" && server && date < server.retainedFrom
               ? `${date} 的日内记录已过保存期，请选择更长时间范围`

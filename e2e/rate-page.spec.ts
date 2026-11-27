@@ -5,6 +5,13 @@ import {
   type SyncResponse,
 } from "../src/lib/contracts/server-types";
 
+declare global {
+  interface Window {
+    chartTicks?: number[];
+    chartHasTimes?: boolean;
+  }
+}
+
 // Keep API mocks authoritative even against production builds. Real SW
 // control and offline navigation are exercised separately in pwa.spec.ts.
 test.use({ serviceWorkers: "block" });
@@ -718,4 +725,64 @@ test("preserves downloaded data offline and after a server failure", async ({
   await expect(page.getByText(/离线 · 显示已缓存数据/)).toBeVisible();
   await page.getByRole("button", { name: "7 天", exact: true }).click();
   await expect(page.locator("canvas")).toBeVisible();
+});
+
+test("keeps the one-day chart y-axis span at least 0.02 for small price changes", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const state = window;
+    state.chartTicks = [];
+    state.chartHasTimes = false;
+    const clear = CanvasRenderingContext2D.prototype.clearRect,
+      fill = CanvasRenderingContext2D.prototype.fillText;
+    CanvasRenderingContext2D.prototype.clearRect = function (
+      ...args: Parameters<typeof clear>
+    ) {
+      state.chartTicks = [];
+      state.chartHasTimes = false;
+      return clear.apply(this, args);
+    };
+    CanvasRenderingContext2D.prototype.fillText = function (
+      text: string,
+      ...args: [number, number, number?]
+    ) {
+      if (/^\d{2}:\d{2}/.test(text)) state.chartHasTimes = true;
+      if (/^\d+(?:\.\d+)?$/.test(text)) state.chartTicks?.push(Number(text));
+      return fill.call(this, text, ...args);
+    };
+  });
+  const data = payload();
+  const minute = Math.floor(Date.now() / 300000) * 300000;
+  data.points = [
+    {
+      minute,
+      kind: "fixed",
+      priceUnits: 47500,
+      sourceMinute: minute,
+      sourceRequestedAt: new Date(minute).toISOString(),
+      publishedAt: new Date(minute).toISOString(),
+      isFallback: false,
+    },
+  ];
+  data.state.live = null;
+  await page.route(/\/api\/sync(?:\?.*)?$/, (route) =>
+    route.fulfill({ json: data }),
+  );
+  await page.goto("/");
+  await expect(page.getByText("4.7500", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "1 日", exact: true }).click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const ticks = window.chartTicks ?? [];
+        if (!window.chartHasTimes || ticks.length < 2 || Math.min(...ticks) < 4)
+          return 0;
+        return (
+          Math.round((Math.max(...ticks) - Math.min(...ticks)) * 1000000) /
+          1000000
+        );
+      }),
+    )
+    .toBeGreaterThanOrEqual(0.02);
 });
